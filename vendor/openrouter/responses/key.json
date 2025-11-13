@@ -1,0 +1,14 @@
+{
+  "data": {
+    "label": "sk-or-v1-116...0ce",
+    "limit": 5,
+    "usage": 0.1015644762,
+    "is_provisioning_key": false,
+    "limit_remaining": 4.8984355238,
+    "is_free_tier": false,
+    "rate_limit": {
+      "requests": 50,
+      "interval": "10s"
+    }
+  }
+}

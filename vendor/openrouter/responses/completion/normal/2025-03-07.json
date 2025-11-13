@@ -1,0 +1,21 @@
+{
+  "id": "gen-1741379411-6Zbsd8lZpfJvmnfitVCg",
+  "provider": "Chutes",
+  "model": "deepseek/deepseek-r1-zero",
+  "object": "chat.completion",
+  "created": 1741379411,
+  "choices": [
+    {
+      "logprobs": null,
+      "finish_reason": "length",
+      "native_finish_reason": "length",
+      "text": "BaseModel, BiLSTM, CNN, RNN",
+      "reasoning": null
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 100,
+    "total_tokens": 109
+  }
+}

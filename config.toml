@@ -1,0 +1,4 @@
+system_prompt = """
+System prompt here
+"""
+models = ["google/gemma-3-27b-it:free", "qwen/qwen3-235b-a22b:free"]

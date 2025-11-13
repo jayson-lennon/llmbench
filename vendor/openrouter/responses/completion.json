@@ -1,0 +1,21 @@
+{
+  "id": "gen-1738697078-nbXebb9pscDuajFRYYob",
+  "provider": "Targon",
+  "model": "deepseek/deepseek-r1-distill-llama-70b",
+  "object": "chat.completion",
+  "created": 1738697078,
+  "choices": [
+    {
+      "logprobs": {
+        "content": [],
+        "refusal": []
+      },
+      "text": "This is a shortened text output"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 4,
+    "completion_tokens": 589,
+    "total_tokens": 593
+  }
+}

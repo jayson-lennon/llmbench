@@ -1,0 +1,37 @@
+{
+  "id": "gen-1743350172-1IIVfOCcL2NyKsCLp8ZU",
+  "provider": "Novita",
+  "model": "qwen/qwq-32b",
+  "object": "chat.completion",
+  "created": 1743350172,
+  "choices": [
+    {
+      "logprobs": null,
+      "finish_reason": "tool_calls",
+      "native_finish_reason": "tool_calls",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "refusal": null,
+        "reasoning": "Okay, so the user just got a \"Task successfully created.\" message. I need to figure out what to do next. Let me check the tools available.\n\nFirst, there's the Suspend function, which is for when there's nothing to do. But since the user just created a task, maybe they need to do something else? Maybe they want to list tasks or update the new one. But the response was just a confirmation, so maybe the user's next step isn't clear. However, the assistant's previous action was creating a task, and now it's done. Since the user hasn't given a new command, perhaps there's nothing more to process right now. \n\nThe tools available include ListTasks, UpdateTask, CreateTask, FeatureRequest, and Suspend. The user hasn't asked for anything else, so maybe the correct action here is to suspend the thread until further input. The Suspend function is meant for when there's nothing else to do, so that's probably the right choice here. Let me make sure I'm not missing any other functions that might apply. The user didn't ask to list tasks or update anything, so yeah, Suspend seems appropriate./tool_call>",
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "chatcmpl-tool-67fd849ab5b6473eb911cd8b051ec8e3",
+            "type": "function",
+            "function": {
+              "name": "Suspend"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "system_fingerprint": "",
+  "usage": {
+    "prompt_tokens": 215,
+    "completion_tokens": 240,
+    "total_tokens": 455
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "gen-1745341114-nKYwMcx3WFKc16n5tq6o",
+  "provider": "Chutes",
+  "model": "microsoft/mai-ds-r1",
+  "object": "chat.completion",
+  "created": 1745341114,
+  "choices": [
+    {
+      "logprobs": null,
+      "finish_reason": "length",
+      "native_finish_reason": "length",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "refusal": null,
+        "reasoning": "Okay, so the user just said, \"This is a test, please just give a very short answer on who you are.\" Hmm, I need to figure out the best way to respond. Let me break it down.\n\nFirst, they mentioned it's a test, so they might be checking how I handle concise requests. The main ask is a very short answer about who I am. My typical response usually starts with \"I'm DeepSeek-R1...\" but maybe I can make it"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22,
+    "completion_tokens": 100,
+    "total_tokens": 122,
+    "cost": 0,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 101
+    }
+  }
+}

@@ -1,0 +1,8 @@
+rustfmt:
+  stage: lint
+  only:
+    - pushes
+  script:
+    - rustup component add rustfmt
+    - cargo fmt -- --check
+  needs: []

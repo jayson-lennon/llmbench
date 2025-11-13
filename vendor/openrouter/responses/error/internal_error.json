@@ -1,0 +1,13 @@
+{
+  "error": {
+    "message": "Provider returned error",
+    "code": 502,
+    "metadata": {
+      "raw": "{\n  \"error\": {\n    \"code\": 500,\n    \"message\": \"An internal error has occurred. Please retry or report in https://developers.generativeai.google/guide/troubleshooting\",\n    \"status\": \"INTERNAL\"\n  }\n}\n",
+      "provider_name": "Google AI Studio",
+      "isDownstreamPipeClean": true,
+      "isErrorUpstreamFault": true
+    }
+  },
+  "user_id": "user_2s8cCd55e4z69e7xmlKZpzDxwV0"
+}

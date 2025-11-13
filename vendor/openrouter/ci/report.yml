@@ -1,0 +1,73 @@
+.report_template:
+  stage: report
+  only:
+    - merge_requests
+    - external_pull_requests
+    - tags
+  variables:
+    TARGET: "x86_64-unknown-linux-gnu"
+    RESTORE_CACHE: "1"
+  allow_failure: true
+  needs: [ "x86_64-unknown-linux-gnu" ]
+
+report-coverage:
+  extends: .report_template
+  only:
+    - merge_requests
+    - master
+  #  tags:
+  #    - unconfined
+  coverage: '/\d+.\d+\% coverage/'
+  script:
+    - cargo install cargo-tarpaulin
+    - |
+      cargo tarpaulin \
+            --verbose \
+            --run-types=AllTargets \
+            --out=Xml --out=Html \
+            --output-dir=./coverage \
+            --manifest-path=Cargo.toml \
+            --avoid-cfg-tarpaulin \
+            --timeout 360 \
+            --ignore-tests
+  artifacts:
+    paths:
+      - ./coverage/*
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: ./coverage/cobertura.xml
+
+report-outdated:
+  extends: .report_template
+  script:
+    - cargo install cargo-outdated
+    - cargo outdated
+
+report-audit:
+  extends: .report_template
+  script:
+    - cargo install cargo-audit
+    - cargo audit
+
+report-geiger:
+  extends: .report_template
+  script:
+    - cargo install cargo-geiger
+    - cargo geiger
+
+report-clippy:
+  extends: .report_template
+  allow_failure: false
+  script:
+    - rustup component add clippy
+    - cargo clippy
+
+#report-clippy-nightly:
+#  extends: .report_template
+#  allow_failure: false
+#  variables:
+#    RUST_TOOLCHAIN: "nightly"
+#  script:
+#    - ./clippy-test.sh
+#    - ./clippy-release.sh

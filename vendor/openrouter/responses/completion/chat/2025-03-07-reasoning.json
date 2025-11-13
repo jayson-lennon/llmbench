@@ -1,0 +1,26 @@
+{
+  "id": "gen-1741377731-IXVglXk7wJo6JeULWGd2",
+  "provider": "Chutes",
+  "model": "cognitivecomputations/dolphin3.0-r1-mistral-24b",
+  "object": "chat.completion",
+  "created": 1741377731,
+  "choices": [
+    {
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Testing begins. Ensure all steps are executed correctly.",
+        "refusal": null,
+        "reasoning": "Okay, the user says this is a development test and asks me to think for a short moment. I need to respond with a short sentence. Let me process that.\n\nFirst, I should acknowledge the test. Maybe start with \"This is a test...\" to confirm understanding. Then, the user wants a short reply. I should keep it concise. Perhaps mention the purpose of the test, like checking functionality or understanding. But wait, the user might be testing my ability to follow instructions. So, a simple confirmation would be better. Something like \"Testing begins. Ensure all steps are executed correctly.\" That's clear and direct. Let me check if that's under a short sentence. Yes, it's one sentence. Alright, that should work.\n"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 44,
+    "completion_tokens": 165,
+    "total_tokens": 209
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "gen-1741368507-lQTKrnTIJHzd43sQTnsR",
+  "provider": "Amazon Bedrock",
+  "model": "anthropic/claude-3.7-sonnet",
+  "object": "chat.completion",
+  "created": 1741368507,
+  "choices": [
+    {
+      "logprobs": null,
+      "finish_reason": "tool_calls",
+      "native_finish_reason": "tool_calls",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "refusal": null,
+        "reasoning": null,
+        "tool_calls": [
+          {
+            "id": "tooluse_pXbc3fvMTeuB2HBSimpsiw",
+            "index": 0,
+            "type": "function",
+            "function": {
+              "name": "echo",
+              "arguments": "{\"message\": \"This is a test of the echo function. Everything is working correctly!\"}"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 453,
+    "completion_tokens": 29,
+    "total_tokens": 482
+  }
+}

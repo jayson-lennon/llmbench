@@ -1,0 +1,30 @@
+{
+  "data": {
+    "id": "gen-1741032693-yTpPxhCWZyzCY8PgCyp7",
+    "upstream_id": null,
+    "total_cost": 0.00228393,
+    "cache_discount": null,
+    "provider_name": "Amazon Bedrock",
+    "created_at": "2025-03-03T20:11:39.766251+00:00",
+    "model": "anthropic/claude-3-7-sonnet-20250219",
+    "app_id": 2230558,
+    "streamed": true,
+    "cancelled": false,
+    "latency": 819,
+    "moderation_latency": 211,
+    "generation_time": 5273,
+    "tokens_prompt": 103,
+    "tokens_completion": 142,
+    "native_tokens_prompt": 29,
+    "native_tokens_completion": 148,
+    "native_tokens_reasoning": 0,
+    "num_media_prompt": null,
+    "num_media_completion": null,
+    "num_search_results": null,
+    "origin": "https://byter.dev/",
+    "is_byok": false,
+    "finish_reason": "stop",
+    "native_finish_reason": "stop",
+    "usage": 0.00228393
+  }
+}

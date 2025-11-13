@@ -1,0 +1,44 @@
+.build_template:
+  stage: build
+  only:
+    - merge_requests
+    - external_pull_requests
+  allow_failure: false
+  variables:
+    ENABLE_CACHE: "1"
+  script:
+    - rustup target add $TARGET
+    - cargo install cargo-nextest
+    - cargo build --target=$TARGET
+    - if [[ -z $DISABLE_TESTS ]]; then cargo build --examples --all-features --target=$TARGET; fi
+    - if [[ -z $DISABLE_TESTS ]]; then cargo build --tests --all-features --target=$TARGET; fi
+    - if [[ -z $DISABLE_TESTS ]]; then cargo nextest run --all-features --target=$TARGET --profile ci; fi
+  artifacts:
+    when: always
+    paths:
+      - target
+    reports:
+      junit:
+        - target/nextest/ci/junit.xml
+
+  cache:
+    key: build
+    paths:
+      - .cargo
+      - target
+
+x86_64-unknown-linux-gnu:
+  extends: .build_template
+  only:
+    - merge_requests
+    - external_pull_requests
+    - master # for the coverage report
+    - tags
+  variables:
+    TARGET: "x86_64-unknown-linux-gnu"
+    #DISABLE_TESTS: 1
+  artifacts:
+    paths:
+      - target
+      - Cargo.lock
+      - .cargo

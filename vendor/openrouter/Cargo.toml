@@ -1,0 +1,47 @@
+[package]
+name = "openrouter"
+version = "0.2.0"
+authors = ["Kevin Becker <k.becker@byter.dev>"]
+description = "A library to interact with the OpenRouter API."
+edition = "2024"
+rust-version = "1.85.1"
+
+repository = "https://gitlab.com/bit-refined/openrouter"
+license = "MIT OR Apache-2.0"
+
+categories = ["api-bindings", "network-programming"]
+
+[badges]
+maintenance = { status = "experimental" }
+
+[features]
+default = []
+integration_tests = []
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde-this-or-that = "0.5"
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "parsing"] }
+
+[dev-dependencies]
+dotenv = "0.15"
+pretty_assertions = "1.4"
+tokio = { version = "1", features = ["macros"] }
+
+[lints.rust]
+warnings = "deny"
+#missing_docs = "deny" # Disabled for now because not everything is tested yet, so things might change.
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[lints.clippy]
+absolute_paths = "deny"
+allow_attributes = "forbid"
+arithmetic_side_effects = "deny"
+as_conversions = "deny"
+expect_used = "deny"
+too_long_first_doc_paragraph = "deny"

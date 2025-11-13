@@ -1,0 +1,2 @@
+absolute-paths-max-segments = 3
+allow-expect-in-tests = true

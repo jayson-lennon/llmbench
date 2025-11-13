@@ -1,0 +1,23 @@
+{
+  "id": "gen-1738698054-yI7fNDyuNM2VdvsYZ6Po",
+  "provider": "Google AI Studio",
+  "model": "google/gemini-2.0-flash-thinking-exp",
+  "object": "chat.completion",
+  "created": 1738698054,
+  "choices": [
+    {
+      "logprobs": null,
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "I am a large language model, trained by Google.",
+        "refusal": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 18,
+    "completion_tokens": 11,
+    "total_tokens": 29
+  }
+}
