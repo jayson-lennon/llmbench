@@ -1,19 +1,44 @@
+use derive_more::Display;
 use glob::glob;
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use tokio::{fs::OpenOptions, io::AsyncReadExt};
 
 use error_stack::{Report, ResultExt};
 
 #[derive(Debug, thiserror::Error)]
-#[error("an BenchError occurred")]
+#[error("a BenchError occurred")]
 pub struct BenchError;
+
+#[derive(Display, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[display("{_0}")]
+pub struct BenchId(pub String);
+
+impl FromStr for BenchId {
+    type Err = Report<BenchError>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((category, name)) = s.split_once("/") {
+            if category.is_empty() {
+                return Err(Report::from(BenchError)).attach("missing category from bench id");
+            }
+            if name.is_empty() {
+                return Err(Report::from(BenchError)).attach("missing name from bench id");
+            }
+            Ok(Self(s.to_string()))
+        } else {
+            Err(Report::from(BenchError)).attach("invalid id format (must be category/benchname)")
+        }
+    }
+}
 
 /// A specific benchmark
 #[derive(Debug, Clone)]
 pub struct Bench {
+    pub id: BenchId,
     pub category: String,
     pub name: String,
     pub system_prompt: Option<String>,
@@ -26,6 +51,10 @@ pub struct Benches {
 }
 
 impl Benches {
+    pub fn contains(&self, id: &BenchId) -> bool {
+        self.benches.iter().any(|bench| &bench.id == id)
+    }
+
     pub async fn new<P>(path: P) -> Result<Self, Report<BenchError>>
     where
         P: AsRef<Path>,
@@ -71,6 +100,42 @@ impl Benches {
 
         Ok(Self { benches })
     }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, Bench> {
+        self.benches.iter()
+    }
+}
+
+impl IntoIterator for Benches {
+    type Item = Bench;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.benches.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Benches {
+    type Item = &'a Bench;
+    type IntoIter = std::slice::Iter<'a, Bench>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.benches.iter()
+    }
+}
+
+impl FromIterator<Bench> for Benches {
+    fn from_iter<I: IntoIterator<Item = Bench>>(iter: I) -> Self {
+        Benches {
+            benches: iter.into_iter().collect(),
+        }
+    }
+}
+
+impl Extend<Bench> for Benches {
+    fn extend<T: IntoIterator<Item = Bench>>(&mut self, iter: T) {
+        self.benches.extend(iter);
+    }
 }
 
 async fn load_bench<P, T1, T2>(category: T1, name: T2, path: P) -> Result<Bench, Report<BenchError>>
@@ -93,7 +158,7 @@ where
                     })?;
                 prompts.push(content);
             }
-            Err(e) => println!("Error reading glob entry: {}", e),
+            Err(e) => tracing::error!(err=?e, "Error reading glob entry"),
         }
     }
 
@@ -120,9 +185,12 @@ where
         }
     };
 
+    let category = category.into();
+    let name = name.into();
     Ok(Bench {
-        category: category.into(),
-        name: name.into(),
+        id: BenchId::from_str(&format!("{}/{}", &category, &name)).unwrap(),
+        category,
+        name,
         system_prompt,
         prompts,
     })
