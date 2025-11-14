@@ -5,12 +5,12 @@ use dotenvy::dotenv;
 use error_stack::{Report, ResultExt};
 use llmbench::{
     bench_loader::{BenchId, Benches},
+    completion::{self, RunConfig},
     init,
     models::Models,
     promptrequest::PromptPayloadBatch,
     result_writer::{ResultWriterCmd, spawn_result_writer},
     results_dump::ResultsDump,
-    run_completion::{self, RunConfig},
 };
 use tokio::task::JoinSet;
 
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Report<AppError>> {
     for (model, requests) in requests {
         let config = config.clone();
         set.spawn(async move {
-            run_completion::start(config, model, requests).await;
+            completion::start(config, model, requests).await;
         });
     }
 

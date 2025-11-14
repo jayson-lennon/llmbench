@@ -13,9 +13,9 @@ use twox_hash::XxHash3_64;
 
 use crate::{
     bench_loader::Benches,
+    completion::RunPayload,
     models::{ModelId, Models},
     results_dump::ResultsDump,
-    run_completion::RunPayload,
 };
 
 const SEED: u64 = 1337;
