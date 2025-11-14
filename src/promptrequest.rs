@@ -1,12 +1,22 @@
-use std::hash::{Hash, Hasher};
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
 
 use openrouter::completions::{
     Request,
-    request::{Message, Stop, Tool, ToolChoice, Usage},
+    request::{Content, Message, Stop, Tool, ToolChoice, Usage},
 };
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use twox_hash::XxHash3_64;
+
+use crate::{
+    bench_loader::Benches,
+    models::{ModelId, Models},
+    results_dump::ResultsDump,
+    run_completion::RunPayload,
+};
 
 const SEED: u64 = 1337;
 
@@ -21,7 +31,6 @@ pub struct PromptHash(pub u64);
 pub struct PromptRequest {
     pub run_number: u32,
     pub model: String,
-
     pub messages: Option<Vec<Message>>,
     pub prompt: Option<String>,
     pub stop: Option<Stop>,
@@ -107,6 +116,120 @@ impl PromptRequest {
             top_a: self.top_a.map(|f| f.0),
             usage: Some(Usage { include: true }),
             ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
+pub struct PromptPayloadBatch {
+    payloads: Vec<RunPayload>,
+}
+
+impl PromptPayloadBatch {
+    /// Requests are usually rate-limited per-model or per-provider. This method takes all the
+    /// requests and batches them up per-model.
+    ///
+    /// This enables spawning multiple tasks per model to make concurrent requests.
+    pub fn break_into_models(self) -> HashMap<ModelId, Vec<RunPayload>> {
+        let mut map: HashMap<ModelId, Vec<RunPayload>> = HashMap::new();
+        for payload in self.payloads {
+            let entry = map
+                .entry(ModelId(payload.prompt.model.clone()))
+                .or_default();
+            entry.push(payload);
+        }
+        map
+    }
+
+    /// Remove already-completed prompt runs
+    pub fn filter_old_runs(&mut self, results: ResultsDump) {
+        let mut total_filtered = 0;
+        let initial_result_len = self.payloads.len();
+        for result in results {
+            self.payloads
+                .retain(|payload| payload.prompt.prompt_hash() != result.hash);
+        }
+        let diff = initial_result_len - self.payloads.len();
+        total_filtered += diff;
+        tracing::info!(
+            requests = initial_result_len,
+            filtered = total_filtered,
+            pending = self.payloads.len(),
+            "filtered benches"
+        );
+    }
+
+    pub fn new(models: Models, benches: Benches, n_runs: u32) -> PromptPayloadBatch {
+        let mut payloads = Vec::new();
+        for model in models {
+            for bench in &benches {
+                for run in 0..n_runs {
+                    let prompt = PromptRequest {
+                        // +1 here because the run counter starts at 1
+                        run_number: run + 1,
+                        model: model.clone(),
+                        messages: Some({
+                            bench
+                                .prompts
+                                .iter()
+                                .map(|prompt| Message::User {
+                                    content: Content::Plain(prompt.clone()),
+                                    name: None,
+                                    cache_control: None,
+                                })
+                                .collect()
+                        }),
+                        ..Default::default()
+                    };
+                    payloads.push(RunPayload {
+                        bench: bench.clone(),
+                        prompt,
+                    });
+                }
+            }
+        }
+
+        Self { payloads }
+    }
+}
+
+impl IntoIterator for PromptPayloadBatch {
+    type Item = RunPayload;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.payloads.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a PromptPayloadBatch {
+    type Item = &'a RunPayload;
+    type IntoIter = std::slice::Iter<'a, RunPayload>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.payloads.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut PromptPayloadBatch {
+    type Item = &'a mut RunPayload;
+    type IntoIter = std::slice::IterMut<'a, RunPayload>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.payloads.iter_mut()
+    }
+}
+
+impl Extend<RunPayload> for PromptPayloadBatch {
+    fn extend<T: IntoIterator<Item = RunPayload>>(&mut self, iter: T) {
+        self.payloads.extend(iter);
+    }
+}
+
+impl FromIterator<RunPayload> for PromptPayloadBatch {
+    fn from_iter<T: IntoIterator<Item = RunPayload>>(iter: T) -> Self {
+        Self {
+            payloads: iter.into_iter().collect(),
         }
     }
 }

@@ -1,5 +1,6 @@
 use derive_more::Display;
 use glob::glob;
+use serde::{Deserialize, Serialize};
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -13,7 +14,7 @@ use error_stack::{Report, ResultExt};
 #[error("a BenchError occurred")]
 pub struct BenchError;
 
-#[derive(Display, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Display, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[display("{_0}")]
 pub struct BenchId(pub String);
 
@@ -36,7 +37,7 @@ impl FromStr for BenchId {
 }
 
 /// A specific benchmark
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct Bench {
     pub id: BenchId,
     pub category: String,

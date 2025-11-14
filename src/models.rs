@@ -1,8 +1,13 @@
 use std::path::Path;
 
+use derive_more::Display;
 use error_stack::{Report, ResultExt};
 use serde::{Deserialize, Serialize};
 use tokio::{fs::OpenOptions, io::AsyncReadExt};
+
+#[derive(Display, Default, Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+#[display("{_0}")]
+pub struct ModelId(pub String);
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct Models {

@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{path::PathBuf, str::FromStr};
 
 use clap::Parser;
 use dotenvy::dotenv;
@@ -10,22 +7,12 @@ use llmbench::{
     bench_loader::{BenchId, Benches},
     init,
     models::Models,
-    promptrequest::PromptRequest,
-    promptresult::PromptResult,
+    promptrequest::PromptPayloadBatch,
+    result_writer::{ResultWriterCmd, spawn_result_writer},
     results_dump::ResultsDump,
+    run_completion::{self, RunConfig},
 };
-use openrouter::{
-    OpenRouter,
-    completions::request::{Content, Message},
-};
-use serde::Serialize;
-use tokio::{fs::OpenOptions, io::AsyncWriteExt};
-
-// TODO:
-// - figure out what benches still need to be ran
-// - spawn a task per model
-// - execute the prompt by sending
-// - handle multi-turn prompts
+use tokio::task::JoinSet;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -40,6 +27,10 @@ struct Args {
     /// OpenRouter API key. (Prefer OPENROUTER_API_KEY env variable for security)
     #[arg(short, long)]
     api_key: Option<String>,
+
+    /// Number of runs per bench
+    #[arg(long, default_value_t = 1)]
+    n_runs: u32,
 
     /// Path to config file
     #[arg(short, long, default_value = "config.toml")]
@@ -104,8 +95,6 @@ async fn main() -> Result<(), Report<AppError>> {
         }
     };
 
-    let openrouter = OpenRouter::new(api_key);
-
     let models = {
         let models = Models::load_from(args.config)
             .await
@@ -123,48 +112,51 @@ async fn main() -> Result<(), Report<AppError>> {
         .change_context(AppError)
         .attach("failed to load existing results")?;
 
-    dbg!(results, models, benches);
-    return Ok(());
+    let mut requests = PromptPayloadBatch::new(models, benches, args.n_runs);
+    requests.filter_old_runs(results);
 
-    let request = PromptRequest {
-        run_number: 2,
-        messages: Some(vec![Message::User {
-            content: Content::Plain("Hello, how are you today?".to_string()),
-            name: None,
-            cache_control: None,
-        }]),
-        model: "google/gemma-3-27b-it:free".to_string(),
-        ..Default::default()
+    let requests = requests.break_into_models();
+
+    let total_requests = requests
+        .iter()
+        .fold(0, |acc, (_, payloads)| acc + payloads.len());
+
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let config = RunConfig {
+        api_key,
+        results_writer: tx.clone(),
     };
 
-    let hash = request.prompt_hash();
+    let mut set = JoinSet::new();
 
-    match openrouter
-        .chat_completion(request.make_openrouter_request())
-        .await
-    {
-        Ok(response) => {
-            let obj = PromptResult {
-                hash,
-                category: todo!(),
-                bench: todo!(),
-                request,
-                responses: vec![response],
-            };
-            write_to_ndjson(&args.results, &obj)
-                .await
-                .change_context(AppError)?;
-            // match openrouter.generation(&response.id).await {
-            //     Ok(info) => {
-            //         dbg!(&info);
-            //     }
-            //     Err(e) => eprintln!("failed to get generation info {e:?}"),
-            // }
-        }
-        Err(e) => {
-            tracing::error!(err=?e, "failed to get chat completion");
-        }
+    let writer = tokio::task::spawn(async move {
+        spawn_result_writer(args.results, rx).await;
+    });
+
+    for (model, requests) in requests {
+        let config = config.clone();
+        set.spawn(async move {
+            run_completion::start(config, model, requests).await;
+        });
     }
+
+    tracing::trace!(count = set.len(), "tasks spawned");
+
+    let mut completed = 0;
+    while (set.join_next().await).is_some() {
+        completed += 1;
+        tracing::info!(
+            remaining = (total_requests - completed),
+            total = total_requests,
+            "job status"
+        );
+    }
+
+    tx.send(ResultWriterCmd::Quit).unwrap();
+
+    let _ = writer.await;
+
     Ok(())
 }
 
@@ -185,34 +177,4 @@ fn get_bench_ids_to_run(args: &Args) -> Result<Vec<BenchId>, Report<AppError>> {
         return Err(Report::from(AppError)).attach("error parsing bench ids");
     }
     Ok(bench_ids.into_iter().flatten().collect::<Vec<_>>())
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("a SaveError occurred")]
-struct SaveError;
-
-async fn write_to_ndjson<P, S>(path: P, result: &S) -> Result<(), Report<SaveError>>
-where
-    P: AsRef<Path>,
-    S: Serialize,
-{
-    let result = serde_json::to_string(result)
-        .change_context(SaveError)
-        .attach("failed to serialized results into json")?;
-    let mut file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(path)
-        .await
-        .change_context(SaveError)
-        .attach("failed to open results file")?;
-    file.write_all(result.as_bytes())
-        .await
-        .change_context(SaveError)
-        .attach("failed to write results")?;
-    file.write_all("\n".as_bytes())
-        .await
-        .change_context(SaveError)
-        .attach("failed to write newline")?;
-    Ok(())
 }
