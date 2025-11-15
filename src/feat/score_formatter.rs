@@ -12,7 +12,9 @@ const HEADER_PASSES: &str = "passes";
 const HEADER_OUTPUT_TOKENS: &str = "tokens";
 const HEADER_COST: &str = "cost ($USD)    ";
 
-use crate::evaluator::score::Scores;
+use crate::evaluator::score::{ScoredResponse, Scores};
+
+type TableWidth = usize;
 
 #[derive(Debug, Clone)]
 pub struct ScoreFormatter {
@@ -60,38 +62,12 @@ impl ScoreFormatter {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     pub fn print(&self) {
-        let div = " | ".fg::<Gray>();
-        // header
-        {
-            let header = format!(
-                "{div}{bench}{div}{model}{div}{result}{div}{npasses}{div}{ntokens}{div}{cost}{div}",
-                bench = "bench".pad_to_width(self.bench_width),
-                model = "model".pad_to_width(self.model_width),
-                result = "result".pad_to_width(self.result_width),
-                npasses = HEADER_PASSES.pad_to_width(self.passes_width),
-                ntokens = HEADER_OUTPUT_TOKENS.pad_to_width(self.output_tokens_width),
-                cost = HEADER_COST.pad_to_width(self.cost_width)
-            );
-            println!("{header}",);
-        }
+        let div = " | ".fg::<Gray>().to_string();
+        self.print_header(&div);
 
         // line under header
-        let table_width = {
-            let plus = " + ";
-            let line = format!(
-                "{plus}{bench}{plus}{model}{plus}{result}{plus}{npasses}{plus}{ntokens}{plus}{cost}{plus}",
-                bench = "".pad_to_width_with_char(self.bench_width, '-'),
-                model = "".pad_to_width_with_char(self.model_width, '-'),
-                result = "".pad_to_width_with_char(self.result_width, '-'),
-                npasses = "".pad_to_width_with_char(self.passes_width, '-'),
-                ntokens = "".pad_to_width_with_char(self.output_tokens_width, '-'),
-                cost = "".pad_to_width_with_char(self.cost_width, '-'),
-            );
-            println!("{line}", line = line.fg::<Gray>());
-            ansi_width(&line)
-        };
+        let table_width = self.print_line_under_header();
 
         // scores table
         {
@@ -120,29 +96,8 @@ impl ScoreFormatter {
                     format!("{n_passes_str}/{n_runs}")
                 };
 
-                let n_tokens =
-                    scores
-                        .iter()
-                        .flat_map(|res| &res.response.responses)
-                        .fold(0, |tokens, res| {
-                            tokens
-                                + res
-                                    .usage
-                                    .as_ref()
-                                    .map(|usage| usage.completion_tokens)
-                                    .unwrap_or_default()
-                        });
-                let cost =
-                    scores
-                        .iter()
-                        .flat_map(|res| &res.response.responses)
-                        .fold(0.0, |cost, res| {
-                            cost + res
-                                .usage
-                                .as_ref()
-                                .map(|usage| usage.cost.unwrap_or_default())
-                                .unwrap_or_default()
-                        });
+                let n_tokens = get_number_of_tokens(scores);
+                let cost = get_monetary_cost(scores);
 
                 let bench = key.bench_id.to_string();
                 let model = key.model_id.to_string();
@@ -175,27 +130,7 @@ impl ScoreFormatter {
                 // response summary
                 {
                     for (response_index, response) in scores.iter().enumerate() {
-                        let chat = response
-                            .response
-                            .responses
-                            .iter()
-                            .flat_map(|res| {
-                                res.choices
-                                    .iter()
-                                    .map(|choice| match choice {
-                                        Choice::NonStreaming(choice) => ChatSummary {
-                                            _role: choice.message.role.clone(),
-                                            content: choice
-                                                .message
-                                                .content
-                                                .clone()
-                                                .unwrap_or_default(),
-                                        },
-                                        _ => unimplemented!(),
-                                    })
-                                    .collect::<Vec<_>>()
-                            })
-                            .collect::<Vec<_>>();
+                        let chat = get_chat_summary(response);
 
                         let response_number = response_index + 1;
                         let pass = response.score.pass;
@@ -226,6 +161,83 @@ impl ScoreFormatter {
             }
         }
     }
+
+    fn print_header(&self, div: &str) {
+        {
+            let header = format!(
+                "{div}{bench}{div}{model}{div}{result}{div}{npasses}{div}{ntokens}{div}{cost}{div}",
+                bench = "bench".pad_to_width(self.bench_width),
+                model = "model".pad_to_width(self.model_width),
+                result = "result".pad_to_width(self.result_width),
+                npasses = HEADER_PASSES.pad_to_width(self.passes_width),
+                ntokens = HEADER_OUTPUT_TOKENS.pad_to_width(self.output_tokens_width),
+                cost = HEADER_COST.pad_to_width(self.cost_width)
+            );
+            println!("{header}",);
+        }
+    }
+
+    fn print_line_under_header(&self) -> TableWidth {
+        let plus = " + ";
+        let line = format!(
+            "{plus}{bench}{plus}{model}{plus}{result}{plus}{npasses}{plus}{ntokens}{plus}{cost}{plus}",
+            bench = "".pad_to_width_with_char(self.bench_width, '-'),
+            model = "".pad_to_width_with_char(self.model_width, '-'),
+            result = "".pad_to_width_with_char(self.result_width, '-'),
+            npasses = "".pad_to_width_with_char(self.passes_width, '-'),
+            ntokens = "".pad_to_width_with_char(self.output_tokens_width, '-'),
+            cost = "".pad_to_width_with_char(self.cost_width, '-'),
+        );
+        println!("{line}", line = line.fg::<Gray>());
+        ansi_width(&line)
+    }
+}
+
+fn get_chat_summary(response: &ScoredResponse) -> Vec<ChatSummary> {
+    response
+        .response
+        .responses
+        .iter()
+        .flat_map(|res| {
+            res.choices
+                .iter()
+                .map(|choice| match choice {
+                    Choice::NonStreaming(choice) => ChatSummary {
+                        _role: choice.message.role.clone(),
+                        content: choice.message.content.clone().unwrap_or_default(),
+                    },
+                    _ => unimplemented!(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
+}
+
+fn get_monetary_cost(scores: &[ScoredResponse]) -> f64 {
+    scores
+        .iter()
+        .flat_map(|res| &res.response.responses)
+        .fold(0.0, |cost, res| {
+            cost + res
+                .usage
+                .as_ref()
+                .map(|usage| usage.cost.unwrap_or_default())
+                .unwrap_or_default()
+        })
+}
+
+fn get_number_of_tokens(scores: &[ScoredResponse]) -> u32 {
+    scores
+        .iter()
+        .flat_map(|res| &res.response.responses)
+        .fold(0, |tokens, res| {
+            tokens
+                + res
+                    .usage
+                    .as_ref()
+                    .map(|usage| usage.completion_tokens)
+                    .unwrap_or_default()
+        })
 }
 
 #[derive(Debug, Clone)]
