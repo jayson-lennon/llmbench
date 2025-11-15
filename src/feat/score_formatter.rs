@@ -100,21 +100,7 @@ impl ScoreFormatter {
                     bench = bench.pad_to_width(self.bench_width),
                     model = model.pad_to_width(self.model_width),
                     result_str = result_str.pad_to_width(self.result_width),
-                    // HACK: pad_to_width can't handle a bunch of colors
-                    passes_str = passes_str.pad_to_width(
-                        passes_str.len() + {
-                            if n_runs >= 10 && n_passes >= 10 {
-                                // "10/10" needs +1
-                                1
-                            } else if n_runs >= 10 {
-                                // "1/10" needs +2
-                                2
-                            } else {
-                                // "1/2" needs +3
-                                3
-                            }
-                        }
-                    ),
+                    passes_str = pad_str(&passes_str, self.passes_width),
                     n_tokens = n_tokens.to_string().pad_to_width(self.output_tokens_width),
                     // -1 for the dollar sign
                     cost = format_args!("${}", cost.to_string().pad_to_width(self.cost_width - 1))
@@ -258,6 +244,19 @@ fn get_number_of_tokens(scores: &[ScoredResponse]) -> u32 {
                     .map(|usage| usage.completion_tokens)
                     .unwrap_or_default()
         })
+}
+
+fn pad_str(input: &str, amount: usize) -> String {
+    let visual_len = ansi_width(input);
+    if visual_len < amount {
+        let diff = amount - visual_len;
+        let padding = (0..diff).map(|_| ' ');
+        let mut input = String::from(input);
+        input.extend(padding);
+        input
+    } else {
+        input.to_string()
+    }
 }
 
 #[derive(Debug, Clone)]
