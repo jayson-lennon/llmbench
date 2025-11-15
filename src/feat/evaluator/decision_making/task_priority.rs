@@ -13,7 +13,7 @@ fn eval(responses: &[Choice]) -> Score {
     if let [choice] = responses
         && let Some(msg) = choice.get_message()
     {
-        let pass = msg.to_lowercase() == "pick a game engine";
+        let pass = msg.to_lowercase().trim() == "pick a game engine";
         return Score::builder().pass(pass).build();
     }
     Score::fail()
