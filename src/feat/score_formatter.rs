@@ -13,8 +13,8 @@ const HEADER_OUTPUT_TOKENS: &str = "tokens";
 const HEADER_COST: &str = "cost ($USD)    ";
 
 use crate::{
-    evaluator::score::{ScoredResponse, Scores},
     feat::cli::eval::SortColumn,
+    feat::evaluator::score::{ScoredResponse, Scores},
 };
 
 type TableWidth = usize;

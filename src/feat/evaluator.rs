@@ -87,9 +87,8 @@ macro_rules! init_benches {
 use linkme::distributed_slice;
 use openrouter::completions::response::Choice;
 
-use crate::{
-    all_bench_results::AllBenchResults,
-    bench_loader::BenchId,
+use crate::feat::{
+    bench::{AllBenchResults, BenchId},
     evaluator::score::{Score, ScoredResponse, Scores},
 };
 use std::collections::HashMap;

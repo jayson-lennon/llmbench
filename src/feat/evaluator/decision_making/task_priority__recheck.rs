@@ -2,8 +2,8 @@ use linkme::distributed_slice;
 use openrouter::completions::response::Choice;
 
 use crate::{
-    bench_loader::BenchId,
-    evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
+    feat::bench::BenchId,
+    feat::evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
 };
 
 #[distributed_slice(EVALUATORS)]

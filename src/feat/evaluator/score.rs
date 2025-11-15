@@ -4,7 +4,10 @@ use bon::Builder;
 use openrouter::completions::response::Choice;
 use serde::{Deserialize, Serialize};
 
-use crate::{bench_loader::BenchId, bench_result::BenchResult, models::ModelId};
+use crate::{
+    feat::bench::{BenchId, BenchResult},
+    feat::models::ModelId,
+};
 
 pub trait GetMessageExt {
     /// Returns a message (if any).

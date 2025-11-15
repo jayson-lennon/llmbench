@@ -12,17 +12,14 @@ use serde::{Deserialize, Serialize};
 use twox_hash::XxHash3_64;
 
 use crate::{
-    all_bench_results::AllBenchResults,
-    bench_loader::Benches,
-    completion::RunPayload,
-    models::{ModelId, Models},
+    feat::models::{ModelId, Models},
+    feat::{
+        bench::{AllBenchResults, Benches},
+        completion::RunPayload,
+    },
 };
 
 const SEED: u64 = 1337;
-
-#[derive(Debug, thiserror::Error)]
-#[error("prompt request error")]
-pub struct PromptRequestError;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct PromptHash(pub u64);

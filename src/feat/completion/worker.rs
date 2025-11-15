@@ -11,12 +11,11 @@ use openrouter::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    bench_loader::{Bench, BenchId},
-    bench_result::BenchResult,
+use crate::feat::{
+    bench::{Bench, BenchId, BenchResult},
+    completion::PromptRequest,
     models::ModelId,
-    promptrequest::PromptRequest,
-    result_writer::{ResultSender, ResultWriterCmd},
+    persistence::{ResultSender, ResultWriterCmd},
 };
 
 /// Everything needed to perform a benchmark.

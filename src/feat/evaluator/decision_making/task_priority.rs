@@ -3,8 +3,8 @@ use openrouter::completions::response::Choice;
 use paste::paste;
 
 use crate::{
-    bench_loader::BenchId,
-    evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
+    feat::bench::BenchId,
+    feat::evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
 };
 
 init_benches!(eval, "decision_making/task_priority" => naive, superprompt, with_context);

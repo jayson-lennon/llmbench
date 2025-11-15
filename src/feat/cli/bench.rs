@@ -1,13 +1,11 @@
 use std::{path::PathBuf, str::FromStr};
 
-use crate::{
-    all_bench_results::AllBenchResults,
-    bench_loader::{BenchId, Benches},
-    completion::{self, RunConfig},
-    feat::cli::SharedArgs,
+use crate::feat::{
+    bench::{AllBenchResults, BenchId, Benches},
+    cli::SharedArgs,
+    completion::{self, PromptPayloadBatch, RunConfig},
     models::Models,
-    promptrequest::PromptPayloadBatch,
-    result_writer::{ResultWriterCmd, spawn_result_writer},
+    persistence::{ResultWriterCmd, spawn_result_writer},
 };
 use clap::Parser;
 use error_stack::{Report, ResultExt};

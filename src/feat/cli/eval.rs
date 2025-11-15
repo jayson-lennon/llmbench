@@ -1,7 +1,5 @@
-use crate::{
-    all_bench_results::AllBenchResults,
-    evaluator::Evaluators,
-    feat::{cli::SharedArgs, score_formatter::ScoreFormatter},
+use crate::feat::{
+    bench::AllBenchResults, cli::SharedArgs, evaluator::Evaluators, score_formatter::ScoreFormatter,
 };
 use clap::{Parser, ValueEnum};
 use derive_more::Display;

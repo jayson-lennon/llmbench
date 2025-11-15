@@ -4,7 +4,7 @@ use error_stack::{Report, ResultExt};
 use serde::Serialize;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
-use crate::bench_result::BenchResult;
+use crate::feat::bench::BenchResult;
 
 pub type ResultReceiver = tokio::sync::mpsc::UnboundedReceiver<ResultWriterCmd>;
 pub type ResultSender = tokio::sync::mpsc::UnboundedSender<ResultWriterCmd>;
