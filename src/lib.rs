@@ -1,4 +1,5 @@
 #![allow(clippy::needless_update)]
+#![allow(clippy::len_without_is_empty)]
 
 pub mod feat;
 
