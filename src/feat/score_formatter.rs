@@ -99,6 +99,8 @@ impl ScoreFormatter {
                 let bench = key.bench_id.to_string();
                 let model = key.model_id.to_string();
 
+                let cost_str = format!("${:.9}", cost.to_string());
+
                 println!(
                     "{div}{bench}{div}{model}{div}{result_str}{div}{passes_str}{div}{n_tokens}{div}{cost}{div}",
                     bench = bench.pad(self.bench_width),
@@ -106,8 +108,7 @@ impl ScoreFormatter {
                     result_str = result_str.pad(self.result_width),
                     passes_str = passes_str.pad(self.passes_width),
                     n_tokens = n_tokens.to_string().pad(self.output_tokens_width),
-                    // -1 for the dollar sign
-                    cost = format_args!("${}", cost.to_string().pad(self.cost_width - 1))
+                    cost = cost_str.pad(self.cost_width)
                 );
 
                 // response summary
