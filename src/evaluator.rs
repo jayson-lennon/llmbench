@@ -151,6 +151,7 @@ impl Evaluators {
                 tracing::error!(bench=%response.bench, "missing evaluator");
             }
         }
+
         Scores::from_iter(scores)
     }
 }

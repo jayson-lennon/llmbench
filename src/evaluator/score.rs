@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use bon::Builder;
 use openrouter::completions::response::Choice;
 use serde::{Deserialize, Serialize};
 
-use crate::promptresult::PromptResponse;
+use crate::{bench_loader::BenchId, models::ModelId, promptresult::PromptResponse};
 
 pub trait GetMessageExt {
     /// Returns a message (if any).
@@ -56,49 +58,72 @@ impl Score {
     }
 }
 
+/// Key used to calculate total number of runs for a given bench+model combination
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BenchModelKey {
+    pub bench_id: BenchId,
+    pub model_id: ModelId,
+}
+
 /// All the scores.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scores {
-    inner: Vec<ScoredResponse>,
+    scores: HashMap<BenchModelKey, Vec<ScoredResponse>>,
+}
+
+impl Scores {
+    pub fn get(&self, k: &BenchModelKey) -> Option<&Vec<ScoredResponse>> {
+        self.scores.get(k)
+    }
+
+    pub fn values(
+        &self,
+    ) -> std::collections::hash_map::Values<'_, BenchModelKey, Vec<ScoredResponse>> {
+        self.scores.values()
+    }
 }
 
 impl IntoIterator for Scores {
-    type Item = ScoredResponse;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type Item = (BenchModelKey, Vec<ScoredResponse>);
+    type IntoIter = std::collections::hash_map::IntoIter<BenchModelKey, Vec<ScoredResponse>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.inner.into_iter()
+        self.scores.into_iter()
     }
 }
 
 impl<'a> IntoIterator for &'a Scores {
-    type Item = &'a ScoredResponse;
-    type IntoIter = std::slice::Iter<'a, ScoredResponse>;
+    type Item = (&'a BenchModelKey, &'a Vec<ScoredResponse>);
+    type IntoIter = std::collections::hash_map::Iter<'a, BenchModelKey, Vec<ScoredResponse>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.inner.iter()
+        self.scores.iter()
     }
 }
 
 impl<'a> IntoIterator for &'a mut Scores {
-    type Item = &'a mut ScoredResponse;
-    type IntoIter = std::slice::IterMut<'a, ScoredResponse>;
+    type Item = (&'a BenchModelKey, &'a mut Vec<ScoredResponse>);
+    type IntoIter = std::collections::hash_map::IterMut<'a, BenchModelKey, Vec<ScoredResponse>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.inner.iter_mut()
+        self.scores.iter_mut()
     }
 }
 
 impl FromIterator<ScoredResponse> for Scores {
     fn from_iter<T: IntoIterator<Item = ScoredResponse>>(iter: T) -> Self {
-        Scores {
-            inner: iter.into_iter().collect(),
-        }
-    }
-}
+        let scores: Vec<ScoredResponse> = iter.into_iter().collect();
 
-impl Extend<ScoredResponse> for Scores {
-    fn extend<T: IntoIterator<Item = ScoredResponse>>(&mut self, iter: T) {
-        self.inner.extend(iter);
+        let mut aggregated: HashMap<BenchModelKey, Vec<ScoredResponse>> = HashMap::new();
+
+        for scored_response in scores {
+            let key = BenchModelKey {
+                bench_id: scored_response.response.bench.clone(),
+                model_id: ModelId(scored_response.response.request.model.clone()),
+            };
+
+            aggregated.entry(key).or_default().push(scored_response);
+        }
+        Scores { scores: aggregated }
     }
 }
