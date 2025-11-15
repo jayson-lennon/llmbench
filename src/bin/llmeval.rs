@@ -42,14 +42,14 @@ async fn main() -> Result<(), Report<AppError>> {
         .attach("failed to load existing responses")?;
 
     let evaluators = Evaluators::default();
+    // TODO: apply filters here
+    // TODO: save/load results
     let scores = evaluators.score(responses);
     dbg!(&scores);
 
     let formatter = ScoreFormatter::format(scores);
 
     formatter.print();
-
-    // TODO: apply filters & sorting here
 
     Ok(())
 }

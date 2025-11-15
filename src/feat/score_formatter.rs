@@ -1,5 +1,5 @@
 use ansi_width::ansi_width;
-use openrouter::completions::response::{self, Choice, NonStreamingChoice};
+use openrouter::completions::response::Choice;
 use owo_colors::{
     OwoColorize,
     colors::{Cyan, Red, css::Gray},
@@ -9,6 +9,8 @@ use pad::PadStr;
 const MARK_PASS: &str = "✅ Pass";
 const MARK_FAIL: &str = "❌ Fail";
 const HEADER_PASSES: &str = "passes";
+const HEADER_OUTPUT_TOKENS: &str = "tokens";
+const HEADER_COST: &str = "cost ($USD)    ";
 
 use crate::evaluator::score::Scores;
 
@@ -27,6 +29,12 @@ pub struct ScoreFormatter {
 
     /// Width of the "passes" column.
     passes_width: usize,
+
+    /// Width of the "output tokens" column.
+    output_tokens_width: usize,
+
+    /// Width of the "cost" column.
+    cost_width: usize,
 }
 
 impl ScoreFormatter {
@@ -47,6 +55,8 @@ impl ScoreFormatter {
             model_width,
             result_width: ansi_width(MARK_PASS),
             passes_width: ansi_width(HEADER_PASSES),
+            output_tokens_width: ansi_width(HEADER_OUTPUT_TOKENS),
+            cost_width: ansi_width(HEADER_COST),
         }
     }
 
@@ -55,11 +65,13 @@ impl ScoreFormatter {
         // header
         {
             let header = format!(
-                "{div}{bench}{div}{model}{div}{result}{div}{npasses}{div}",
-                bench = "bench".pad_to_width(self.bench_width).bold(),
-                model = "model".pad_to_width(self.model_width).bold(),
-                result = "result".pad_to_width(self.result_width).bold(),
-                npasses = "passes".pad_to_width(self.passes_width)
+                "{div}{bench}{div}{model}{div}{result}{div}{npasses}{div}{ntokens}{div}{cost}{div}",
+                bench = "bench".pad_to_width(self.bench_width),
+                model = "model".pad_to_width(self.model_width),
+                result = "result".pad_to_width(self.result_width),
+                npasses = HEADER_PASSES.pad_to_width(self.passes_width),
+                ntokens = HEADER_OUTPUT_TOKENS.pad_to_width(self.output_tokens_width),
+                cost = HEADER_COST.pad_to_width(self.cost_width)
             );
             println!("{header}",);
         }
@@ -68,18 +80,21 @@ impl ScoreFormatter {
         let table_width = {
             let plus = " + ";
             let line = format!(
-                "{plus}{bench}{plus}{model}{plus}{result}{plus}{npasses}{plus}",
+                "{plus}{bench}{plus}{model}{plus}{result}{plus}{npasses}{plus}{ntokens}{plus}{cost}{plus}",
                 bench = "".pad_to_width_with_char(self.bench_width, '-'),
                 model = "".pad_to_width_with_char(self.model_width, '-'),
                 result = "".pad_to_width_with_char(self.result_width, '-'),
                 npasses = "".pad_to_width_with_char(self.passes_width, '-'),
+                ntokens = "".pad_to_width_with_char(self.output_tokens_width, '-'),
+                cost = "".pad_to_width_with_char(self.cost_width, '-'),
             );
             println!("{line}", line = line.fg::<Gray>());
             ansi_width(&line)
         };
 
+        // scores table
         {
-            // scores table
+            // summary line
             for (key, scores) in &self.scores {
                 let n_runs = scores.len();
                 let n_passes = scores.iter().fold(0, |pass, response| {
@@ -93,20 +108,67 @@ impl ScoreFormatter {
                 } else {
                     MARK_FAIL.fg::<Red>().to_string()
                 };
-                let n_passes_str = if passed_all {
-                    format!("{n_passes}").fg::<Cyan>().to_string()
-                } else {
-                    format!("{n_passes}").fg::<Red>().to_string()
+
+                let passes_str = {
+                    let n_passes_str = if passed_all {
+                        format!("{n_passes}").fg::<Cyan>().to_string()
+                    } else {
+                        format!("{n_passes}").fg::<Red>().to_string()
+                    };
+                    let n_runs = format!("{n_runs}").fg::<Cyan>().to_string();
+                    format!("{n_passes_str}/{n_runs}")
                 };
-                let n_runs_str = format!("{n_runs}").fg::<Cyan>().to_string();
+
+                let n_tokens =
+                    scores
+                        .iter()
+                        .flat_map(|res| &res.response.responses)
+                        .fold(0, |tokens, res| {
+                            tokens
+                                + res
+                                    .usage
+                                    .as_ref()
+                                    .map(|usage| usage.completion_tokens)
+                                    .unwrap_or_default()
+                        });
+                let cost =
+                    scores
+                        .iter()
+                        .flat_map(|res| &res.response.responses)
+                        .fold(0.0, |cost, res| {
+                            cost + res
+                                .usage
+                                .as_ref()
+                                .map(|usage| usage.cost.unwrap_or_default())
+                                .unwrap_or_default()
+                        });
 
                 let bench = key.bench_id.to_string();
                 let model = key.model_id.to_string();
 
                 println!(
-                    "{div}{bench}{div}{model}{div}{result_str}{div}{n_passes_str}/{n_runs_str}",
+                    "{div}{bench}{div}{model}{div}{result_str}{div}{passes_str}{div}{n_tokens}{div}{cost}{div}",
                     bench = bench.pad_to_width(self.bench_width),
                     model = model.pad_to_width(self.model_width),
+                    result_str = result_str.pad_to_width(self.result_width),
+                    // HACK: pad_to_width can't handle a bunch of colors
+                    passes_str = passes_str.pad_to_width(
+                        passes_str.len() + {
+                            if n_runs >= 10 && n_passes >= 10 {
+                                // "10/10" needs +1
+                                1
+                            } else if n_runs >= 10 {
+                                // "1/10" needs +2
+                                2
+                            } else {
+                                // "1/2" needs +3
+                                3
+                            }
+                        }
+                    ),
+                    n_tokens = n_tokens.to_string().pad_to_width(self.output_tokens_width),
+                    // -1 for the dollar sign
+                    cost = format_args!("${}", cost.to_string().pad_to_width(self.cost_width - 1))
                 );
 
                 // response summary
@@ -121,7 +183,7 @@ impl ScoreFormatter {
                                     .iter()
                                     .map(|choice| match choice {
                                         Choice::NonStreaming(choice) => ChatSummary {
-                                            role: choice.message.role.clone(),
+                                            _role: choice.message.role.clone(),
                                             content: choice
                                                 .message
                                                 .content
@@ -138,8 +200,8 @@ impl ScoreFormatter {
                         let pass = response.score.pass;
                         // format individual messages
                         for message in chat {
-                            let message = message.content.replace("\n", "");
-                            let wrapped_message = textwrap::wrap(&message, table_width);
+                            let message = message.content.replace("\n", " ");
+                            let wrapped_message = textwrap::wrap(&message, table_width - 13);
                             let rnumber_str = {
                                 let text = format!("R{response_number}");
                                 if pass {
@@ -167,7 +229,7 @@ impl ScoreFormatter {
 
 #[derive(Debug, Clone)]
 struct ChatSummary {
-    role: String,
+    _role: String,
     content: String,
 }
 // | bench                                | model                      | result  | passes |
