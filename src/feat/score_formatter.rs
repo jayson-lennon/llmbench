@@ -66,7 +66,6 @@ impl ScoreFormatter {
         let div = " | ".fg::<Gray>().to_string();
         self.print_header(&div);
 
-        // line under header
         let table_width = self.print_line_under_header();
 
         // scores table
@@ -74,27 +73,12 @@ impl ScoreFormatter {
             // summary line
             for (key, scores) in &self.scores {
                 let n_runs = scores.len();
-                let n_passes = scores.iter().fold(0, |pass, response| {
-                    let diff = usize::from(response.score.pass);
-                    pass + diff
-                });
+                let n_passes = get_number_of_passed_tests(scores);
                 let passed_all = n_passes == n_runs;
 
-                let result_str = if passed_all {
-                    MARK_PASS.fg::<Cyan>().to_string()
-                } else {
-                    MARK_FAIL.fg::<Red>().to_string()
-                };
+                let result_str = get_formatted_pass_fail_section(passed_all);
 
-                let passes_str = {
-                    let n_passes_str = if passed_all {
-                        format!("{n_passes}").fg::<Cyan>().to_string()
-                    } else {
-                        format!("{n_passes}").fg::<Red>().to_string()
-                    };
-                    let n_runs = format!("{n_runs}").fg::<Cyan>().to_string();
-                    format!("{n_passes_str}/{n_runs}")
-                };
+                let passes_str = get_formatted_passes_section(n_runs, n_passes, passed_all);
 
                 let n_tokens = get_number_of_tokens(scores);
                 let cost = get_monetary_cost(scores);
@@ -138,14 +122,7 @@ impl ScoreFormatter {
                         for message in chat {
                             let message = message.content.replace('\n', " ");
                             let wrapped_message = textwrap::wrap(&message, table_width - 13);
-                            let rnumber_str = {
-                                let text = format!("R{response_number}");
-                                if pass {
-                                    text.fg::<Cyan>().to_string()
-                                } else {
-                                    text.fg::<Red>().to_string()
-                                }
-                            };
+                            let rnumber_str = get_formatted_response_number(response_number, pass);
                             print!("{div}   {rnumber_str}: ",);
                             for (i, msg) in wrapped_message.iter().enumerate() {
                                 let msg = msg.fg::<Gray>();
@@ -191,6 +168,40 @@ impl ScoreFormatter {
         println!("{line}", line = line.fg::<Gray>());
         ansi_width(&line)
     }
+}
+
+fn get_formatted_response_number(response_number: usize, pass: bool) -> String {
+    let text = format!("R{response_number}");
+    if pass {
+        text.fg::<Cyan>().to_string()
+    } else {
+        text.fg::<Red>().to_string()
+    }
+}
+
+fn get_number_of_passed_tests(scores: &[ScoredResponse]) -> usize {
+    scores.iter().fold(0, |pass, response| {
+        let diff = usize::from(response.score.pass);
+        pass + diff
+    })
+}
+
+fn get_formatted_pass_fail_section(passed_all: bool) -> String {
+    if passed_all {
+        MARK_PASS.fg::<Cyan>().to_string()
+    } else {
+        MARK_FAIL.fg::<Red>().to_string()
+    }
+}
+
+fn get_formatted_passes_section(n_runs: usize, n_passes: usize, passed_all: bool) -> String {
+    let n_passes_str = if passed_all {
+        format!("{n_passes}").fg::<Cyan>().to_string()
+    } else {
+        format!("{n_passes}").fg::<Red>().to_string()
+    };
+    let n_runs = format!("{n_runs}").fg::<Cyan>().to_string();
+    format!("{n_passes_str}/{n_runs}")
 }
 
 fn get_chat_summary(response: &ScoredResponse) -> Vec<ChatSummary> {
