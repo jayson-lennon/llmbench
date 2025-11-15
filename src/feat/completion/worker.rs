@@ -31,6 +31,7 @@ pub struct RunPayload {
     pub prompt: PromptRequest,
 }
 
+/// Configuration required to start a new completion run.
 #[derive(Debug, Clone)]
 pub struct RunConfig {
     pub api_key: String,
@@ -42,7 +43,7 @@ pub struct RunConfig {
 pub struct CompletionError;
 
 /// Implementation to start and execute a chat session.
-// #[tracing::instrument(skip(config, payloads), err)]
+#[tracing::instrument(skip(config, payloads), err)]
 async fn run_impl(
     config: RunConfig,
     model: ModelId,
