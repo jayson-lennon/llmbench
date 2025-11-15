@@ -137,3 +137,13 @@ impl FromIterator<ScoredResponse> for Scores {
         Scores { scores: aggregated }
     }
 }
+
+impl FromIterator<(BenchModelKey, Vec<ScoredResponse>)> for Scores {
+    fn from_iter<T: IntoIterator<Item = (BenchModelKey, Vec<ScoredResponse>)>>(iter: T) -> Self {
+        let mut scores = HashMap::new();
+        for (k, v) in iter {
+            scores.insert(k, v);
+        }
+        Scores { scores }
+    }
+}

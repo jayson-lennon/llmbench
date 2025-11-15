@@ -12,7 +12,10 @@ const HEADER_PASSES: &str = "passes";
 const HEADER_OUTPUT_TOKENS: &str = "tokens";
 const HEADER_COST: &str = "cost ($USD)    ";
 
-use crate::evaluator::score::{ScoredResponse, Scores};
+use crate::{
+    evaluator::score::{ScoredResponse, Scores},
+    feat::cli::eval::SortColumn,
+};
 
 type TableWidth = usize;
 
@@ -62,11 +65,17 @@ impl ScoreFormatter {
         }
     }
 
-    pub fn print(&self) {
+    pub fn print(&self, sort_column: SortColumn) {
         let div = " | ".fg::<Gray>().to_string();
         self.print_header(&div);
 
         let table_width = self.print_line_under_header();
+
+        let mut scores = self.scores.iter().collect::<Vec<_>>();
+        scores.sort_by(|(a, _), (b, _)| match sort_column {
+            SortColumn::Bench => a.bench_id.cmp(&b.bench_id),
+            SortColumn::Model => a.model_id.cmp(&b.model_id),
+        });
 
         // scores table
         {
@@ -256,17 +265,3 @@ struct ChatSummary {
     _role: String,
     content: String,
 }
-// | bench                                | model                      | result  | passes |
-// + ------------------------------------ + -------------------------- + ------- + ------ +
-// | decision_making/task_priority__naive | qwen/qwen3-235b-a22b:free  | ❌ Fail | 1/2
-//  |   R1: Lorem ipsum dolor sit amet consectetur adipiscing elit. Sit amet consectetur
-//          adipiscing elit quisque faucibus ex. Adipiscing elit quisque faucibus ex sapien.
-//      R2: Vitae pellentesque sem placerat in id cursus mi. Cursus mi pretium tellus duis
-//          convallis tempus leo. Tempus leo eu aenean sed diam urna tempor.
-// | decision_making/task_priority__naive | qwen/qwen3-235b-a22b:free  | ❌ Fail | 1/2
-//  |   R1: Lorem ipsum dolor sit amet consectetur adipiscing elit. Sit amet consectetur
-//          adipiscing elit quisque faucibus ex. Adipiscing elit quisque faucibus ex sapien.
-//      R2: Vitae pellentesque sem placerat in id cursus mi. Cursus mi pretium tellus duis
-//          convallis tempus leo. Tempus leo eu aenean sed diam urna tempor.
-// | decision_making/task_priority__naive | qwen/qwen3-235b-a22b:free  | ❌ Fail | 1/2
-// | decision_making/task_priority__naive | qwen/qwen3-coder           | ❌ Fail | 0/1
