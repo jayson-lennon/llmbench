@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     hash::{Hash, Hasher},
 };
 
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use twox_hash::XxHash3_64;
 
 use crate::{
-    all_responses::AllResponses,
+    all_bench_results::AllBenchResults,
     bench_loader::Benches,
     completion::RunPayload,
     models::{ModelId, Models},
@@ -76,6 +76,9 @@ impl PromptRequest {
     /// Return the hash of this request.
     ///
     /// Used to identify this specific request.
+    ///
+    /// The hash is computed from user messages, system messages, and tool messages. Responses from
+    /// LLMs added as part of the request are ignored for the purposes of hashing.
     pub fn prompt_hash(&self) -> PromptHash {
         // Filter out all LLM responses so we get a consistent hash based only on known inputs.
         let messages = self
@@ -83,7 +86,11 @@ impl PromptRequest {
             .clone()
             .unwrap_or_default()
             .into_iter()
-            .filter(|msg| matches!(msg, Message::User { .. }))
+            .filter(|msg| {
+                matches!(msg, Message::User { .. })
+                    || matches!(msg, Message::Tool { .. })
+                    || matches!(msg, Message::System { .. })
+            })
             .collect::<Vec<_>>();
 
         let mut request = self.clone();
@@ -130,19 +137,19 @@ impl PromptPayloadBatch {
     /// requests and batches them up per-model.
     ///
     /// This enables spawning multiple tasks per model to make concurrent requests.
-    pub fn break_into_models(self) -> HashMap<ModelId, Vec<RunPayload>> {
-        let mut map: HashMap<ModelId, Vec<RunPayload>> = HashMap::new();
+    pub fn split_by_models(self) -> HashMap<ModelId, VecDeque<RunPayload>> {
+        let mut map: HashMap<ModelId, VecDeque<RunPayload>> = HashMap::new();
         for payload in self.payloads {
             let entry = map
                 .entry(ModelId(payload.prompt.model.clone()))
                 .or_default();
-            entry.push(payload);
+            entry.push_back(payload);
         }
         map
     }
 
     /// Remove already-completed prompt runs
-    pub fn filter_old_runs(&mut self, results: AllResponses) {
+    pub fn filter_old_runs(&mut self, results: AllBenchResults) {
         let mut total_filtered = 0;
         let initial_result_len = self.payloads.len();
         for result in results {
@@ -159,17 +166,25 @@ impl PromptPayloadBatch {
         );
     }
 
-    pub fn new(models: Models, benches: Benches, n_runs: u32) -> PromptPayloadBatch {
+    pub fn new(models: Models, benches: &Benches, n_runs: u32) -> PromptPayloadBatch {
         let mut payloads = Vec::new();
         for model in models {
-            for bench in &benches {
+            for bench in benches {
                 for run in 0..n_runs {
                     let prompt = PromptRequest {
                         // +1 here because the run counter starts at 1
                         run_number: run + 1,
                         model: model.clone(),
-                        messages: Some({
-                            bench
+                        messages: {
+                            let mut prompts = Vec::new();
+                            if let Some(system_prompt) = &bench.system_prompt {
+                                prompts.push(Message::System {
+                                    content: Content::Plain(system_prompt.clone()),
+                                    name: None,
+                                    cache_control: None,
+                                });
+                            }
+                            let user_prompts = bench
                                 .prompts
                                 .iter()
                                 .map(|prompt| Message::User {
@@ -177,8 +192,10 @@ impl PromptPayloadBatch {
                                     name: None,
                                     cache_control: None,
                                 })
-                                .collect()
-                        }),
+                                .collect::<Vec<_>>();
+                            prompts.extend(user_prompts);
+                            Some(prompts)
+                        },
                         ..Default::default()
                     };
                     payloads.push(RunPayload {
@@ -190,6 +207,14 @@ impl PromptPayloadBatch {
         }
 
         Self { payloads }
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, RunPayload> {
+        self.payloads.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, RunPayload> {
+        self.payloads.iter_mut()
     }
 }
 

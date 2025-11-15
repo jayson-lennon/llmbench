@@ -3,7 +3,7 @@
 //! Example implementation:
 //! ```no_run
 //! #[distributed_slice(EVALUATORS)]
-//! static EVALUATOR EvaluatorInit = init;
+//! static EVALUATOR: EvaluatorInit = init;
 //!
 //! fn init() -> Evaluator {
 //!     Evaluator {
@@ -11,12 +11,9 @@
 //!         eval,
 //!     }
 //! }
-//! fn eval(evaluator: &Evaluator, content: &str) -> EvalResult {
-//!     let pass = false; // perform evaluation
-//!     EvalResult::builder()
-//!         .bench(evaluator.bench.clone())
-//!         .pass(pass)
-//!         .build()
+//! fn eval(responses: &[Choice]) -> Score {
+//!     // your evaluation code here
+//!     Score::pass()
 //! }
 //! ```
 //!
@@ -91,7 +88,7 @@ use linkme::distributed_slice;
 use openrouter::completions::response::Choice;
 
 use crate::{
-    all_responses::AllResponses,
+    all_bench_results::AllBenchResults,
     bench_loader::BenchId,
     evaluator::score::{Score, ScoredResponse, Scores},
 };
@@ -122,7 +119,7 @@ pub struct Evaluators {
 }
 
 impl Evaluators {
-    pub fn score(&self, responses: AllResponses) -> Scores {
+    pub fn score(&self, responses: AllBenchResults) -> Scores {
         let mut scores = Vec::new();
 
         for response in responses {

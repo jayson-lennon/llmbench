@@ -4,7 +4,8 @@ use clap::Parser;
 use dotenvy::dotenv;
 use error_stack::{Report, ResultExt};
 use llmbench::{
-    all_responses::AllResponses, evaluator::Evaluators, feat::score_formatter::ScoreFormatter, init,
+    all_bench_results::AllBenchResults, evaluator::Evaluators,
+    feat::score_formatter::ScoreFormatter, init,
 };
 
 #[derive(Parser, Debug)]
@@ -36,7 +37,7 @@ async fn main() -> Result<(), Report<AppError>> {
     dotenv().unwrap();
     let args = Args::parse();
 
-    let responses = AllResponses::load(&args.results)
+    let responses = AllBenchResults::load(&args.results)
         .await
         .change_context(AppError)
         .attach("failed to load existing responses")?;
@@ -45,7 +46,6 @@ async fn main() -> Result<(), Report<AppError>> {
     // TODO: apply filters here
     // TODO: save/load results
     let scores = evaluators.score(responses);
-    dbg!(&scores);
 
     let formatter = ScoreFormatter::format(scores);
 

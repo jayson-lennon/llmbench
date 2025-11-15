@@ -60,6 +60,7 @@ impl ScoreFormatter {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn print(&self) {
         let div = " | ".fg::<Gray>();
         // header
@@ -98,7 +99,7 @@ impl ScoreFormatter {
             for (key, scores) in &self.scores {
                 let n_runs = scores.len();
                 let n_passes = scores.iter().fold(0, |pass, response| {
-                    let diff = if response.score.pass { 1 } else { 0 };
+                    let diff = usize::from(response.score.pass);
                     pass + diff
                 });
                 let passed_all = n_passes == n_runs;
@@ -200,7 +201,7 @@ impl ScoreFormatter {
                         let pass = response.score.pass;
                         // format individual messages
                         for message in chat {
-                            let message = message.content.replace("\n", " ");
+                            let message = message.content.replace('\n', " ");
                             let wrapped_message = textwrap::wrap(&message, table_width - 13);
                             let rnumber_str = {
                                 let text = format!("R{response_number}");

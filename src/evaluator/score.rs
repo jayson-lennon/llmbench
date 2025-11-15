@@ -4,7 +4,7 @@ use bon::Builder;
 use openrouter::completions::response::Choice;
 use serde::{Deserialize, Serialize};
 
-use crate::{bench_loader::BenchId, models::ModelId, promptresult::PromptResponse};
+use crate::{bench_loader::BenchId, bench_result::BenchResult, models::ModelId};
 
 pub trait GetMessageExt {
     /// Returns a message (if any).
@@ -23,7 +23,7 @@ impl GetMessageExt for &Choice {
 /// A scored response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoredResponse {
-    pub response: PromptResponse,
+    pub response: BenchResult,
     pub score: Score,
 }
 
@@ -80,6 +80,16 @@ impl Scores {
         &self,
     ) -> std::collections::hash_map::Values<'_, BenchModelKey, Vec<ScoredResponse>> {
         self.scores.values()
+    }
+
+    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, BenchModelKey, Vec<ScoredResponse>> {
+        self.scores.iter()
+    }
+
+    pub fn iter_mut(
+        &mut self,
+    ) -> std::collections::hash_map::IterMut<'_, BenchModelKey, Vec<ScoredResponse>> {
+        self.scores.iter_mut()
     }
 }
 

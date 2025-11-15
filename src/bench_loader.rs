@@ -28,7 +28,7 @@ impl FromStr for BenchId {
     type Err = Report<BenchError>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((category, name)) = s.split_once("/") {
+        if let Some((category, name)) = s.split_once('/') {
             if category.is_empty() {
                 return Err(Report::from(BenchError)).attach("missing category from bench id");
             }
@@ -215,15 +215,4 @@ where
     }
 
     Ok(dir_names)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn reads_dir() {
-        let benches = Benches::new("prompts").await.unwrap();
-        dbg!(&benches);
-    }
 }

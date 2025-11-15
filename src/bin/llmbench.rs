@@ -4,7 +4,7 @@ use clap::Parser;
 use dotenvy::dotenv;
 use error_stack::{Report, ResultExt};
 use llmbench::{
-    all_responses::AllResponses,
+    all_bench_results::AllBenchResults,
     bench_loader::{BenchId, Benches},
     completion::{self, RunConfig},
     init,
@@ -107,15 +107,15 @@ async fn main() -> Result<(), Report<AppError>> {
         }
     };
 
-    let results = AllResponses::load(&args.results)
+    let existing_results = AllBenchResults::load(&args.results)
         .await
         .change_context(AppError)
         .attach("failed to load existing results")?;
 
-    let mut requests = PromptPayloadBatch::new(models, benches, args.n_runs);
-    requests.filter_old_runs(results);
+    let mut requests = PromptPayloadBatch::new(models, &benches, args.n_runs);
+    requests.filter_old_runs(existing_results);
 
-    let requests = requests.break_into_models();
+    let requests = requests.split_by_models();
 
     let total_requests = requests
         .iter()
@@ -130,14 +130,14 @@ async fn main() -> Result<(), Report<AppError>> {
 
     let mut set = JoinSet::new();
 
-    let writer = tokio::task::spawn(async move {
+    let result_writer = tokio::task::spawn(async move {
         spawn_result_writer(args.results, rx).await;
     });
 
     for (model, requests) in requests {
         let config = config.clone();
         set.spawn(async move {
-            completion::start(config, model, requests).await;
+            completion::run(config, model, requests).await;
         });
     }
 
@@ -155,7 +155,7 @@ async fn main() -> Result<(), Report<AppError>> {
 
     tx.send(ResultWriterCmd::Quit).unwrap();
 
-    let _ = writer.await;
+    let _ = result_writer.await;
 
     Ok(())
 }

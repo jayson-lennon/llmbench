@@ -1,15 +1,31 @@
-use error_stack::Report;
-use openrouter::OpenRouter;
+use std::collections::VecDeque;
+
+use error_stack::{Report, ResultExt};
+use openrouter::{
+    OpenRouter,
+    completions::{
+        Response,
+        request::{Content, Message},
+        response::Choice,
+    },
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    bench_loader::Bench,
+    bench_loader::{Bench, BenchId},
+    bench_result::BenchResult,
     models::ModelId,
     promptrequest::PromptRequest,
-    promptresult::PromptResponse,
     result_writer::{ResultSender, ResultWriterCmd},
 };
 
+/// Everything needed to perform a benchmark.
+///
+/// A payload represents a single benchmark for a single model.
+///
+/// Payloads contain:
+/// - the bench info (name, prompts, etc)
+/// - the request (all config for sending the request)
 #[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub struct RunPayload {
     pub bench: Bench,
@@ -24,45 +40,118 @@ pub struct RunConfig {
 
 #[derive(Debug, thiserror::Error)]
 #[error("a RunCompletion occurred")]
-pub struct RunCompletion;
+pub struct CompletionError;
 
-#[tracing::instrument(skip(config, payloads), err)]
-async fn start_impl(
+/// Implementation to start and execute a chat session.
+// #[tracing::instrument(skip(config, payloads), err)]
+async fn run_impl(
     config: RunConfig,
     model: ModelId,
-    payloads: Vec<RunPayload>,
-) -> Result<(), Report<RunCompletion>> {
+    mut payloads: VecDeque<RunPayload>,
+) -> Result<(), Report<CompletionError>> {
     let openrouter = OpenRouter::new(config.api_key);
-    for payload in payloads {
-        let hash = payload.prompt.prompt_hash();
-        tracing::info!(model=%model, bench=%payload.bench.id, "sending completion request");
-        match openrouter
-            .chat_completion(payload.prompt.make_openrouter_request())
-            .await
-        {
-            Ok(response) => {
-                tracing::debug!(model=%model, bench=%payload.bench.id, "got response");
-                let result = PromptResponse {
-                    hash,
-                    bench: payload.bench.id,
-                    request: payload.prompt,
-                    responses: vec![response],
-                };
-                config
-                    .results_tx
-                    .send(ResultWriterCmd::SaveResult(result))
-                    .unwrap();
+
+    while let Some(payload) = payloads.pop_front() {
+        let bench = payload.bench.id.clone();
+
+        // All chats will use this session as a base. The messages will get updated as responses come
+        // in.
+        let base_payload = payload.clone();
+
+        // Pull out the messages for the chat.
+        let mut bench_messages = payload
+            .prompt
+            .messages
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect::<VecDeque<_>>();
+
+        // All messages in the current session.
+        let mut chat = Vec::new();
+
+        let mut responses = Vec::new();
+
+        while let Some(msg) = bench_messages.pop_front() {
+            let mut request = base_payload.clone();
+            // add the next benchmark message to the chat
+            chat.push(msg);
+
+            // clone the chat into the request prompt
+            request.prompt.messages = Some(chat.clone());
+
+            // generate a completion
+            let response = complete(&openrouter, request, &model, &bench).await?;
+
+            // If we get an assistant message back as the response, add it to the chat.
+            if let Some(choice) = response.choices.last()
+                && let Choice::NonStreaming(choice) = choice
+            {
+                let new_msg = extract_assistant_message(choice);
+
+                chat.push(new_msg);
             }
-            Err(e) => {
-                tracing::error!(err=?e, "failed to get chat completion");
-            }
+
+            // push the complete response for eval
+            responses.push(response);
         }
+
+        let bench_result = BenchResult {
+            hash: payload.prompt.prompt_hash(),
+            bench: bench.clone(),
+            request: payload.prompt,
+            responses,
+        };
+
+        config
+            .results_tx
+            .send(ResultWriterCmd::SaveResult(bench_result))
+            .unwrap();
     }
+
     Ok(())
 }
 
-pub async fn start(config: RunConfig, model: ModelId, payloads: Vec<RunPayload>) {
-    if let Err(e) = start_impl(config, model.clone(), payloads).await {
-        tracing::error!(model=%model, err=?e, "an error occurred while processing a request")
+/// Converts an assistant response into an assistant request message in a chat session.
+fn extract_assistant_message(
+    choice: &openrouter::completions::response::NonStreamingChoice,
+) -> Message {
+    Message::Assistant {
+        content: choice
+            .message
+            .content
+            .as_ref()
+            .map(|msg| Content::Plain(msg.clone())),
+        name: None,
+        tool_calls: None,
+    }
+}
+
+/// Run a completion request.
+async fn complete(
+    api: &OpenRouter,
+    request: RunPayload,
+    model: &ModelId,
+    bench: &BenchId,
+) -> Result<Response, Report<CompletionError>> {
+    tracing::info!(model=%model, bench=%model, "sending completion request");
+    match api
+        .chat_completion(request.prompt.make_openrouter_request())
+        .await
+    {
+        Ok(response) => {
+            tracing::debug!(model=%model, bench=%bench, "got response");
+            Ok(response)
+        }
+        Err(e) => {
+            tracing::error!(err=?e, "failed to get chat completion");
+            Err(e).change_context(CompletionError)
+        }
+    }
+}
+
+pub async fn run(config: RunConfig, model: ModelId, payloads: VecDeque<RunPayload>) {
+    if let Err(e) = run_impl(config, model.clone(), payloads).await {
+        tracing::error!(model=%model, err=?e, "an error occurred while processing a request");
     }
 }
