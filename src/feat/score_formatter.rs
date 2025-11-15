@@ -1,10 +1,11 @@
+use std::borrow::Cow;
+
 use ansi_width::ansi_width;
 use openrouter::completions::response::Choice;
 use owo_colors::{
     OwoColorize,
     colors::{Cyan, Red, css::Gray},
 };
-use pad::PadStr;
 
 const MARK_PASS: &str = "✅ Pass";
 const MARK_FAIL: &str = "❌ Fail";
@@ -97,13 +98,13 @@ impl ScoreFormatter {
 
                 println!(
                     "{div}{bench}{div}{model}{div}{result_str}{div}{passes_str}{div}{n_tokens}{div}{cost}{div}",
-                    bench = bench.pad_to_width(self.bench_width),
-                    model = model.pad_to_width(self.model_width),
-                    result_str = result_str.pad_to_width(self.result_width),
-                    passes_str = pad_str(&passes_str, self.passes_width),
-                    n_tokens = n_tokens.to_string().pad_to_width(self.output_tokens_width),
+                    bench = bench.pad(self.bench_width),
+                    model = model.pad(self.model_width),
+                    result_str = result_str.pad(self.result_width),
+                    passes_str = passes_str.pad(self.passes_width),
+                    n_tokens = n_tokens.to_string().pad(self.output_tokens_width),
                     // -1 for the dollar sign
-                    cost = format_args!("${}", cost.to_string().pad_to_width(self.cost_width - 1))
+                    cost = format_args!("${}", cost.to_string().pad(self.cost_width - 1))
                 );
 
                 // response summary
@@ -138,12 +139,12 @@ impl ScoreFormatter {
         {
             let header = format!(
                 "{div}{bench}{div}{model}{div}{result}{div}{npasses}{div}{ntokens}{div}{cost}{div}",
-                bench = "bench".pad_to_width(self.bench_width),
-                model = "model".pad_to_width(self.model_width),
-                result = "result".pad_to_width(self.result_width),
-                npasses = HEADER_PASSES.pad_to_width(self.passes_width),
-                ntokens = HEADER_OUTPUT_TOKENS.pad_to_width(self.output_tokens_width),
-                cost = HEADER_COST.pad_to_width(self.cost_width)
+                bench = "bench".pad(self.bench_width),
+                model = "model".pad(self.model_width),
+                result = "result".pad(self.result_width),
+                npasses = HEADER_PASSES.pad(self.passes_width),
+                ntokens = HEADER_OUTPUT_TOKENS.pad(self.output_tokens_width),
+                cost = HEADER_COST.pad(self.cost_width)
             );
             println!("{header}",);
         }
@@ -153,12 +154,12 @@ impl ScoreFormatter {
         let plus = " + ";
         let line = format!(
             "{plus}{bench}{plus}{model}{plus}{result}{plus}{npasses}{plus}{ntokens}{plus}{cost}{plus}",
-            bench = "".pad_to_width_with_char(self.bench_width, '-'),
-            model = "".pad_to_width_with_char(self.model_width, '-'),
-            result = "".pad_to_width_with_char(self.result_width, '-'),
-            npasses = "".pad_to_width_with_char(self.passes_width, '-'),
-            ntokens = "".pad_to_width_with_char(self.output_tokens_width, '-'),
-            cost = "".pad_to_width_with_char(self.cost_width, '-'),
+            bench = "".pad_with_char(self.bench_width, '-'),
+            model = "".pad_with_char(self.model_width, '-'),
+            result = "".pad_with_char(self.result_width, '-'),
+            npasses = "".pad_with_char(self.passes_width, '-'),
+            ntokens = "".pad_with_char(self.output_tokens_width, '-'),
+            cost = "".pad_with_char(self.cost_width, '-'),
         );
         println!("{line}", line = line.fg::<Gray>());
         ansi_width(&line)
@@ -246,16 +247,40 @@ fn get_number_of_tokens(scores: &[ScoredResponse]) -> u32 {
         })
 }
 
-fn pad_str(input: &str, amount: usize) -> String {
+fn pad_str(input: &str, amount: usize, ch: char) -> Cow<'_, str> {
     let visual_len = ansi_width(input);
     if visual_len < amount {
         let diff = amount - visual_len;
-        let padding = (0..diff).map(|_| ' ');
+        let padding = (0..diff).map(|_| ch);
         let mut input = String::from(input);
         input.extend(padding);
-        input
+        Cow::Owned(input)
     } else {
-        input.to_string()
+        Cow::Borrowed(input)
+    }
+}
+
+trait PadExt {
+    fn pad(&self, len: usize) -> Cow<'_, str>;
+    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str>;
+}
+
+impl PadExt for String {
+    fn pad(&self, len: usize) -> Cow<'_, str> {
+        pad_str(self.as_str(), len, ' ')
+    }
+
+    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
+        pad_str(self.as_str(), len, ch)
+    }
+}
+
+impl PadExt for &'static str {
+    fn pad(&self, len: usize) -> Cow<'_, str> {
+        pad_str(self, len, ' ')
+    }
+    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
+        pad_str(self, len, ch)
     }
 }
 
