@@ -11,7 +11,7 @@ const MARK_PASS: &str = "✅ Pass";
 const MARK_FAIL: &str = "❌ Fail";
 const HEADER_BENCH: &str = "bench";
 const HEADER_MODEL: &str = "model";
-const HEADER_RESULT: &str = "ersult";
+const HEADER_RESULT: &str = "result";
 const HEADER_PASSES: &str = "passes";
 const HEADER_OUTPUT_TOKENS: &str = "tokens";
 const HEADER_COST: &str = "cost ($USD)    ";
@@ -118,11 +118,13 @@ impl ScoreFormatter {
                         let response_number = response_index + 1;
                         let pass = response.score.pass;
                         // format individual messages
-                        for message in chat {
+                        for (turn_index, message) in chat.iter().enumerate() {
                             let message = message.content.replace('\n', " ");
-                            let wrapped_message = textwrap::wrap(&message, table_width - 13);
                             let rnumber_str = get_formatted_response_number(response_number, pass);
-                            print!("{div}   {rnumber_str}: ",);
+                            let tnumber_str =
+                                format!("{}: ", turn_index + 1).fg::<Gray>().to_string();
+                            print!("{div}  {rnumber_str}{tnumber_str}",);
+                            let wrapped_message = textwrap::wrap(&message, table_width - 13);
                             for (i, msg) in wrapped_message.iter().enumerate() {
                                 let msg = msg.fg::<Gray>();
                                 if i == 0 {
@@ -170,7 +172,7 @@ impl ScoreFormatter {
 }
 
 fn get_formatted_response_number(response_number: usize, pass: bool) -> String {
-    let text = format!("R{response_number}");
+    let text = format!("{response_number}R");
     if pass {
         text.fg::<Cyan>().to_string()
     } else {
@@ -263,6 +265,10 @@ fn pad_str(input: &str, amount: usize, ch: char) -> Cow<'_, str> {
     }
 }
 
+/// Extension methods to make it easier to pad strings.
+///
+/// Note that this is ANSI color-code aware and operates on the visual representation of the text
+/// in the terminal.
 trait PadExt {
     fn pad(&self, len: usize) -> Cow<'_, str>;
     fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str>;
