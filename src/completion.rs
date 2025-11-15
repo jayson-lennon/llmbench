@@ -66,6 +66,3 @@ pub async fn start(config: RunConfig, model: ModelId, payloads: Vec<RunPayload>)
         tracing::error!(model=%model, err=?e, "an error occurred while processing a request")
     }
 }
-
-// eval -> pick a bench -> apply an "evaluator" on the message index like response[1] -> apply a
-// score or bool
