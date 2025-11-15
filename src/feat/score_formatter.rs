@@ -9,6 +9,9 @@ use owo_colors::{
 
 const MARK_PASS: &str = "✅ Pass";
 const MARK_FAIL: &str = "❌ Fail";
+const HEADER_BENCH: &str = "bench";
+const HEADER_MODEL: &str = "model";
+const HEADER_RESULT: &str = "ersult";
 const HEADER_PASSES: &str = "passes";
 const HEADER_OUTPUT_TOKENS: &str = "tokens";
 const HEADER_COST: &str = "cost ($USD)    ";
@@ -139,9 +142,9 @@ impl ScoreFormatter {
         {
             let header = format!(
                 "{div}{bench}{div}{model}{div}{result}{div}{npasses}{div}{ntokens}{div}{cost}{div}",
-                bench = "bench".pad(self.bench_width),
-                model = "model".pad(self.model_width),
-                result = "result".pad(self.result_width),
+                bench = HEADER_BENCH.pad(self.bench_width),
+                model = HEADER_MODEL.pad(self.model_width),
+                result = HEADER_RESULT.pad(self.result_width),
                 npasses = HEADER_PASSES.pad(self.passes_width),
                 ntokens = HEADER_OUTPUT_TOKENS.pad(self.output_tokens_width),
                 cost = HEADER_COST.pad(self.cost_width)
