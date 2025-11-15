@@ -135,17 +135,29 @@ async fn complete(
     bench: &BenchId,
 ) -> Result<Response, Report<CompletionError>> {
     tracing::info!(model=%model, bench=%model, "sending completion request");
-    match api
-        .chat_completion(request.prompt.make_openrouter_request())
-        .await
+
+    // Add 1 minute timeout
+    let timeout_duration = std::time::Duration::from_secs(60);
+
+    match tokio::time::timeout(
+        timeout_duration,
+        api.chat_completion(request.prompt.make_openrouter_request()),
+    )
+    .await
     {
-        Ok(response) => {
+        Ok(Ok(response)) => {
             tracing::debug!(model=%model, bench=%bench, "got response");
             Ok(response)
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::error!(err=?e, "failed to get chat completion");
-            Err(e).change_context(CompletionError)
+            Err(e)
+                .change_context(CompletionError)
+                .attach("failed to get chat completion")
+        }
+        Err(_) => {
+            tracing::error!("chat completion request timed out after 1 minute");
+            Err(Report::new(CompletionError)).attach("timed out")
         }
     }
 }
