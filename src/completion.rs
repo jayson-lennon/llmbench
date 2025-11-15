@@ -19,7 +19,7 @@ pub struct RunPayload {
 #[derive(Debug, Clone)]
 pub struct RunConfig {
     pub api_key: String,
-    pub results_writer: ResultSender,
+    pub results_tx: ResultSender,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,7 +49,7 @@ async fn start_impl(
                     responses: vec![response],
                 };
                 config
-                    .results_writer
+                    .results_tx
                     .send(ResultWriterCmd::SaveResult(result))
                     .unwrap();
             }

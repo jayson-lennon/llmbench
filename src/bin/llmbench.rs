@@ -125,7 +125,7 @@ async fn main() -> Result<(), Report<AppError>> {
 
     let config = RunConfig {
         api_key,
-        results_writer: tx.clone(),
+        results_tx: tx.clone(),
     };
 
     let mut set = JoinSet::new();
