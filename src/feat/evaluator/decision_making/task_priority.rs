@@ -7,7 +7,7 @@ use crate::{
     feat::evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
 };
 
-init_benches!(eval, "decision_making/task_priority" => naive, superprompt, with_context);
+init_benches!(eval, "decision_making/task_priority" => context, cot, naive, superprompt);
 
 fn eval(responses: &[Choice]) -> Score {
     if let [choice] = responses

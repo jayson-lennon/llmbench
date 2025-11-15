@@ -20,7 +20,7 @@ impl Deref for Response {
     }
 }
 
-#[derive(Clone, Serialize, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Debug, Deserialize, PartialEq, Eq, thiserror::Error)]
 #[cfg_attr(test, serde(deny_unknown_fields))]
 pub struct Error {
     /// Please refer to the OpenRouter documentation on what the
@@ -30,6 +30,16 @@ pub struct Error {
     pub code: u16,
     pub message: String,
     pub metadata: Option<Value>,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Error(code: {}, message: {}, metadata: {:?}",
+            self.code, self.message, self.metadata
+        )
+    }
 }
 
 impl Error {

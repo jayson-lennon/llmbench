@@ -127,6 +127,12 @@ fn extract_assistant_message(
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CompletionErrorWrapper {
+    #[error("openrouter error {_0}")]
+    OpenRouter(#[from] openrouter::error::Error),
+}
+
 /// Run a completion request.
 async fn complete(
     api: &OpenRouter,
@@ -151,9 +157,21 @@ async fn complete(
         }
         Ok(Err(e)) => {
             tracing::error!(err=?e, "failed to get chat completion");
-            Err(e)
-                .change_context(CompletionError)
-                .attach("failed to get chat completion")
+            match e {
+                openrouter::Error::OpenRouter(e) => {
+                    tracing::error!(err=?e, "an openrouter error occurred");
+                    Err(e)
+                        .map_err(CompletionErrorWrapper::OpenRouter)
+                        .change_context(CompletionError)
+                        .attach("failed to get chat completion")
+                }
+                e => {
+                    tracing::error!(err=?e, "an misc worker error occurred");
+                    Err(e)
+                        .change_context(CompletionError)
+                        .attach("failed to get chat completion")
+                }
+            }
         }
         Err(_) => {
             tracing::error!("chat completion request timed out after 1 minute");
