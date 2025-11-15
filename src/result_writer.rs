@@ -4,7 +4,7 @@ use error_stack::{Report, ResultExt};
 use serde::Serialize;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
-use crate::promptresult::PromptResult;
+use crate::promptresult::PromptResponse;
 
 pub type ResultReceiver = tokio::sync::mpsc::UnboundedReceiver<ResultWriterCmd>;
 pub type ResultSender = tokio::sync::mpsc::UnboundedSender<ResultWriterCmd>;
@@ -12,7 +12,7 @@ pub type ResultSender = tokio::sync::mpsc::UnboundedSender<ResultWriterCmd>;
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum ResultWriterCmd {
-    SaveResult(PromptResult),
+    SaveResult(PromptResponse),
     Quit,
 }
 

@@ -4,13 +4,13 @@ use clap::Parser;
 use dotenvy::dotenv;
 use error_stack::{Report, ResultExt};
 use llmbench::{
+    all_responses::AllResponses,
     bench_loader::{BenchId, Benches},
     completion::{self, RunConfig},
     init,
     models::Models,
     promptrequest::PromptPayloadBatch,
     result_writer::{ResultWriterCmd, spawn_result_writer},
-    results_dump::ResultsDump,
 };
 use tokio::task::JoinSet;
 
@@ -107,7 +107,7 @@ async fn main() -> Result<(), Report<AppError>> {
         }
     };
 
-    let results = ResultsDump::load(&args.results)
+    let results = AllResponses::load(&args.results)
         .await
         .change_context(AppError)
         .attach("failed to load existing results")?;

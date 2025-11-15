@@ -7,11 +7,9 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptResult {
+pub struct PromptResponse {
     /// Hash generated from the `PromptRequest`. This prevents duplicate requests.
     pub hash: PromptHash,
-    /// The category that this bench belongs to.
-    pub category: String,
     /// The name of the bench.
     pub bench: BenchId,
     /// All data sent

@@ -18,6 +18,12 @@ pub struct BenchError;
 #[display("{_0}")]
 pub struct BenchId(pub String);
 
+impl BenchId {
+    pub const fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 impl FromStr for BenchId {
     type Err = Report<BenchError>;
 
@@ -40,8 +46,6 @@ impl FromStr for BenchId {
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct Bench {
     pub id: BenchId,
-    pub category: String,
-    pub name: String,
     pub system_prompt: Option<String>,
     pub prompts: Vec<String>,
 }
@@ -190,8 +194,6 @@ where
     let name = name.into();
     Ok(Bench {
         id: BenchId::from_str(&format!("{}/{}", &category, &name)).unwrap(),
-        category,
-        name,
         system_prompt,
         prompts,
     })

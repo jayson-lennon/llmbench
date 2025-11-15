@@ -9,6 +9,12 @@ use tokio::{fs::OpenOptions, io::AsyncReadExt};
 #[display("{_0}")]
 pub struct ModelId(pub String);
 
+impl ModelId {
+    pub const fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct Models {
     models: Vec<String>,

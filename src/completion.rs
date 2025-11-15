@@ -6,7 +6,7 @@ use crate::{
     bench_loader::Bench,
     models::ModelId,
     promptrequest::PromptRequest,
-    promptresult::PromptResult,
+    promptresult::PromptResponse,
     result_writer::{ResultSender, ResultWriterCmd},
 };
 
@@ -42,9 +42,8 @@ async fn start_impl(
         {
             Ok(response) => {
                 tracing::debug!(model=%model, bench=%payload.bench.id, "got response");
-                let result = PromptResult {
+                let result = PromptResponse {
                     hash,
-                    category: payload.bench.category.clone(),
                     bench: payload.bench.id,
                     request: payload.prompt,
                     responses: vec![response],
@@ -67,3 +66,6 @@ pub async fn start(config: RunConfig, model: ModelId, payloads: Vec<RunPayload>)
         tracing::error!(model=%model, err=?e, "an error occurred while processing a request")
     }
 }
+
+// eval -> pick a bench -> apply an "evaluator" on the message index like response[1] -> apply a
+// score or bool

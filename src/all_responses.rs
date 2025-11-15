@@ -3,19 +3,19 @@ use std::{io::ErrorKind, path::Path};
 use error_stack::{Report, ResultExt};
 use tokio::{fs::OpenOptions, io::AsyncReadExt};
 
-use crate::promptresult::PromptResult;
+use crate::promptresult::PromptResponse;
 
 #[derive(Debug, Clone)]
-pub struct ResultsDump {
-    pub results: Vec<PromptResult>,
+pub struct AllResponses {
+    pub inner: Vec<PromptResponse>,
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("a ResultsDump error occurred")]
-pub struct ResultsDumpError;
+#[error("an AllResponsesError error occurred")]
+pub struct AllResponsesError;
 
-impl ResultsDump {
-    pub async fn load<P>(path: P) -> Result<Self, Report<ResultsDumpError>>
+impl AllResponses {
+    pub async fn load<P>(path: P) -> Result<Self, Report<AllResponsesError>>
     where
         P: AsRef<Path>,
     {
@@ -27,9 +27,9 @@ impl ResultsDump {
         let mut file = match file {
             Ok(file) => file,
             Err(e) => match e.kind() {
-                ErrorKind::NotFound => return Ok(Self { results: vec![] }),
+                ErrorKind::NotFound => return Ok(Self { inner: vec![] }),
                 _ => {
-                    return Err(e).change_context(ResultsDumpError).attach_with(|| {
+                    return Err(e).change_context(AllResponsesError).attach_with(|| {
                         format!(
                             "failed to open results file at '{}'",
                             path.as_ref().display()
@@ -42,7 +42,7 @@ impl ResultsDump {
         let mut buf = String::new();
         file.read_to_string(&mut buf)
             .await
-            .change_context(ResultsDumpError)
+            .change_context(AllResponsesError)
             .attach_with(|| {
                 format!(
                     "failed to read results file at '{}'",
@@ -52,43 +52,43 @@ impl ResultsDump {
 
         let mut results = Vec::new();
         for result in buf.lines() {
-            let result: PromptResult = serde_json::from_str(result)
-                .change_context(ResultsDumpError)
+            let result: PromptResponse = serde_json::from_str(result)
+                .change_context(AllResponsesError)
                 .attach("deserialization eror")?;
             results.push(result);
         }
-        Ok(Self { results })
+        Ok(Self { inner: results })
     }
 }
 
-impl IntoIterator for ResultsDump {
-    type Item = PromptResult;
+impl IntoIterator for AllResponses {
+    type Item = PromptResponse;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.results.into_iter()
+        self.inner.into_iter()
     }
 }
 
-impl<'a> IntoIterator for &'a ResultsDump {
-    type Item = &'a PromptResult;
-    type IntoIter = std::slice::Iter<'a, PromptResult>;
+impl<'a> IntoIterator for &'a AllResponses {
+    type Item = &'a PromptResponse;
+    type IntoIter = std::slice::Iter<'a, PromptResponse>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.results.iter()
+        self.inner.iter()
     }
 }
 
-impl Extend<PromptResult> for ResultsDump {
-    fn extend<T: IntoIterator<Item = PromptResult>>(&mut self, iter: T) {
-        self.results.extend(iter);
+impl Extend<PromptResponse> for AllResponses {
+    fn extend<T: IntoIterator<Item = PromptResponse>>(&mut self, iter: T) {
+        self.inner.extend(iter);
     }
 }
 
-impl FromIterator<PromptResult> for ResultsDump {
-    fn from_iter<T: IntoIterator<Item = PromptResult>>(iter: T) -> Self {
+impl FromIterator<PromptResponse> for AllResponses {
+    fn from_iter<T: IntoIterator<Item = PromptResponse>>(iter: T) -> Self {
         Self {
-            results: Vec::from_iter(iter),
+            inner: Vec::from_iter(iter),
         }
     }
 }

@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 use twox_hash::XxHash3_64;
 
 use crate::{
+    all_responses::AllResponses,
     bench_loader::Benches,
     completion::RunPayload,
     models::{ModelId, Models},
-    results_dump::ResultsDump,
 };
 
 const SEED: u64 = 1337;
@@ -142,7 +142,7 @@ impl PromptPayloadBatch {
     }
 
     /// Remove already-completed prompt runs
-    pub fn filter_old_runs(&mut self, results: ResultsDump) {
+    pub fn filter_old_runs(&mut self, results: AllResponses) {
         let mut total_filtered = 0;
         let initial_result_len = self.payloads.len();
         for result in results {

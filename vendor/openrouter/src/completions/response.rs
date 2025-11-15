@@ -34,7 +34,7 @@ pub enum Object {
 pub struct ResponseUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
-    pub cost: Option<u32>,
+    pub cost: Option<f64>,
     pub prompt_tokens_details: Option<PromptTokenDetails>,
     pub completion_tokens_details: Option<CompletionTokenDetails>,
     pub total_tokens: u32,
