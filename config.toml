@@ -7,7 +7,6 @@ models = [
     "baidu/ernie-4.5-21b-a3b-thinking",
     "baidu/ernie-4.5-vl-28b-a3b",
     "deepseek/deepseek-chat-v3.1",
-    "deepseek/deepseek-chat-v3.1",
     "deepseek/deepseek-prover-v2",
     "deepseek/deepseek-r1-0528",
     "deepseek/deepseek-r1-0528-qwen3-8b",
