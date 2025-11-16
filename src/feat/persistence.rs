@@ -16,6 +16,7 @@ pub enum ResultWriterCmd {
     Quit,
 }
 
+#[tracing::instrument(skip(path, rx))]
 pub async fn spawn_result_writer<P>(path: P, total_requests: usize, mut rx: ResultReceiver)
 where
     P: Into<PathBuf>,
@@ -46,6 +47,7 @@ where
 #[error("a SaveError occurred")]
 pub struct SaveError;
 
+#[tracing::instrument(skip_all, err)]
 pub async fn write_to_ndjson<P, S>(path: P, result: &S) -> Result<(), Report<SaveError>>
 where
     P: AsRef<Path>,
