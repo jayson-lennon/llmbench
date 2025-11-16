@@ -112,9 +112,9 @@ mod eval {
     use linkme::distributed_slice;
     use openrouter::completions::response::Choice;
 
-    use crate::{
-        feat::bench::BenchId,
-        feat::evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
+    use crate::feat::{
+        bench::{BenchId, helper::StringBenchExt},
+        evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
     };
 
     #[distributed_slice(EVALUATORS)]
@@ -131,8 +131,8 @@ mod eval {
         match responses {
             [a, b] => match (a.get_message(), b.get_message()) {
                 (Some(a), Some(b)) => {
-                    let pass_1 = a.to_lowercase().trim() == "pick a game engine";
-                    let pass_2 = b.to_lowercase().trim() == "yes";
+                    let pass_1 = a.lowercase().alphanumeric_only().trim() == "pick a game engine";
+                    let pass_2 = b.lowercase().alphanumeric_only().trim() == "yes";
                     Score::builder().pass(pass_1 && pass_2).build()
                 }
                 _ => Score::fail(),

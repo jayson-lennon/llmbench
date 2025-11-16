@@ -5,7 +5,7 @@ use openrouter::completions::{
 };
 
 /// Create a new user message.
-pub fn user_message<M>(msg: M) -> Message
+pub(in crate::feat::bench) fn user_message<M>(msg: M) -> Message
 where
     M: Into<String>,
 {
@@ -18,7 +18,7 @@ where
 }
 
 /// Create a new assistant message.
-pub fn assistant_message<M>(msg: M) -> Message
+pub(in crate::feat::bench) fn assistant_message<M>(msg: M) -> Message
 where
     M: Into<String>,
 {
@@ -44,5 +44,26 @@ impl ResponseExt for Response {
         } else {
             None
         }
+    }
+}
+
+pub(in crate::feat::bench) trait StringBenchExt {
+    fn alphanumeric_only(&self) -> String;
+    fn lowercase(&self) -> String;
+}
+
+impl StringBenchExt for String {
+    /// Includes:
+    /// - characters
+    /// - numbers
+    /// - whitespace
+    fn alphanumeric_only(&self) -> String {
+        self.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect()
+    }
+
+    fn lowercase(&self) -> String {
+        self.to_lowercase()
     }
 }

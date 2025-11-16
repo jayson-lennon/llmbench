@@ -96,7 +96,7 @@ mod eval {
     use openrouter::completions::response::Choice;
 
     use crate::feat::{
-        bench::BenchId,
+        bench::{BenchId, helper::StringBenchExt},
         evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
     };
 
@@ -114,7 +114,7 @@ mod eval {
         match responses {
             [a] => match a.get_message() {
                 Some(a) => {
-                    let answer = a.to_lowercase().trim() == "pick a game engine";
+                    let answer = a.lowercase().alphanumeric_only().trim() == "pick a game engine";
                     Score::builder().pass(answer).build()
                 }
                 _ => Score::fail(),
