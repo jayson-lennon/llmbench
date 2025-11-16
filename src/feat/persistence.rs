@@ -14,6 +14,8 @@ pub type ResultSender = tokio::sync::mpsc::UnboundedSender<ResultWriterCmd>;
 #[allow(clippy::large_enum_variant)]
 pub enum ResultWriterCmd {
     SaveResult(BenchResult),
+    /// Tell the writer that a job failed. The writer should update the remaining jobs.
+    JobError,
     Quit,
 }
 
@@ -43,6 +45,10 @@ pub async fn spawn_result_writer<P>(
                 } else {
                     tracing::debug!(bench=%result.bench, model=%result.model, "wrote result");
                 }
+            }
+            ResultWriterCmd::JobError => {
+                completed += 1;
+                pb.inc(1);
             }
             ResultWriterCmd::Quit => return,
         }

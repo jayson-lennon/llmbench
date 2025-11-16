@@ -75,6 +75,7 @@ async fn run_impl(
             }
             Err(e) => {
                 tracing::error!(err=?e, "error");
+                config.results_tx.send(ResultWriterCmd::JobError).unwrap();
                 return Err(e);
             }
         }

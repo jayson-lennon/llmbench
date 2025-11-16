@@ -114,7 +114,8 @@ mod eval {
         match responses {
             [a] => match a.get_message() {
                 Some(a) => {
-                    let answer = a.lowercase().alphanumeric_only().trim() == "pick a game engine";
+                    let answer = a.lowercase().remove_chat_tags().alphanumeric_only().trim()
+                        == "pick a game engine";
                     Score::builder().pass(answer).build()
                 }
                 _ => Score::fail(),

@@ -988,6 +988,7 @@ dependencies = [
  "ordered-float",
  "owo-colors",
  "paste",
+ "regex",
  "serde",
  "serde_json",
  "textwrap",

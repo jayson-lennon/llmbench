@@ -157,8 +157,12 @@ mod eval {
         match responses {
             [_, answer] => match answer.get_message() {
                 Some(answer) => {
-                    let pass =
-                        answer.lowercase().alphanumeric_only().trim() == "pick a game engine";
+                    let pass = answer
+                        .lowercase()
+                        .remove_chat_tags()
+                        .alphanumeric_only()
+                        .trim()
+                        == "pick a game engine";
                     Score::builder().pass(pass).build()
                 }
                 _ => Score::fail(),

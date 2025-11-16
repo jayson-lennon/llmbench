@@ -131,8 +131,10 @@ mod eval {
         match responses {
             [a, b] => match (a.get_message(), b.get_message()) {
                 (Some(a), Some(b)) => {
-                    let pass_1 = a.lowercase().alphanumeric_only().trim() == "pick a game engine";
-                    let pass_2 = b.lowercase().alphanumeric_only().trim() == "yes";
+                    let pass_1 = a.lowercase().remove_chat_tags().alphanumeric_only().trim()
+                        == "pick a game engine";
+                    let pass_2 =
+                        b.lowercase().remove_chat_tags().alphanumeric_only().trim() == "yes";
                     Score::builder().pass(pass_1 && pass_2).build()
                 }
                 _ => Score::fail(),

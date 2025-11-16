@@ -1,8 +1,11 @@
+use std::sync::OnceLock;
+
 use openrouter::completions::{
     Response,
     request::{Content, Message},
     response::Choice,
 };
+use regex::Regex;
 
 /// Create a new user message.
 pub(in crate::feat::bench) fn user_message<M>(msg: M) -> Message
@@ -47,9 +50,15 @@ impl ResponseExt for Response {
     }
 }
 
+fn chat_tag_re() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| Regex::new(r"<\|.*?\|>").unwrap())
+}
+
 pub(in crate::feat::bench) trait StringBenchExt {
     fn alphanumeric_only(&self) -> String;
     fn lowercase(&self) -> String;
+    fn remove_chat_tags(&self) -> String;
 }
 
 impl StringBenchExt for String {
@@ -65,5 +74,43 @@ impl StringBenchExt for String {
 
     fn lowercase(&self) -> String {
         self.to_lowercase()
+    }
+
+    fn remove_chat_tags(&self) -> String {
+        let re = chat_tag_re();
+        re.replace_all(self, "").to_string()
+    }
+}
+
+impl StringBenchExt for &'static str {
+    /// Includes:
+    /// - characters
+    /// - numbers
+    /// - whitespace
+    fn alphanumeric_only(&self) -> String {
+        self.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect()
+    }
+
+    fn lowercase(&self) -> String {
+        self.to_lowercase()
+    }
+
+    fn remove_chat_tags(&self) -> String {
+        let re = chat_tag_re();
+        re.replace_all(self, "").to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removes_chat_tags() {
+        let input = "<|begin_of_box|>Pick a game engine<|end_of_box|>";
+        let input = input.remove_chat_tags();
+        assert_eq!(input, "Pick a game engine");
     }
 }
