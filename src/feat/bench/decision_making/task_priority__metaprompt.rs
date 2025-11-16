@@ -128,6 +128,9 @@ You will be given a list of tasks for a solo video game developer to work on. Ch
 - [ ] People walking
 - [ ] Cars driving
 - [ ] Title screen
+
+# **OUTPUT FORMAT**
+A single line with the task to work on. No additional commentary.
 "#;
 }
 mod eval {

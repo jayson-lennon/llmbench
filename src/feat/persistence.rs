@@ -17,7 +17,7 @@ pub enum ResultWriterCmd {
     Quit,
 }
 
-#[tracing::instrument(skip(path, rx))]
+#[tracing::instrument(skip(path, rx, pb))]
 pub async fn spawn_result_writer<P>(
     path: P,
     total_requests: usize,
