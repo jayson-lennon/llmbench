@@ -10,7 +10,8 @@ mod bench {
 
     use crate::feat::{
         bench::{
-            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, helper::user_message,
+            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, BenchResultRequestExt,
+            BenchResultResponseExt, helper::user_message,
         },
         completion::{
             PromptRequest,
@@ -31,20 +32,25 @@ mod bench {
     ) -> Result<BenchResult, Report<CompletionError>> {
         let bench = BenchId(ID.to_string());
 
+        let mut result = BenchResult {
+            hash: ctx.run_hash,
+            bench: bench.clone(),
+            model: ctx.model.clone(),
+            requests: vec![],
+            responses: vec![],
+        };
+
         let request = PromptRequest::builder()
             .model(ctx.model.to_string())
             .messages(vec![user_message(PROMPT)])
-            .build();
+            .build()
+            .save_to(&mut result);
 
-        let response = complete(&api, request.clone(), &ctx.model, &bench).await?;
+        let _ = complete(&api, request.clone(), &ctx.model, &bench)
+            .await?
+            .save_to(&mut result);
 
-        Ok(BenchResult {
-            hash: ctx.run_hash,
-            bench,
-            model: ctx.model.clone(),
-            requests: vec![request],
-            responses: vec![response],
-        })
+        Ok(result)
     }
 
     const PROMPT: &str = r#"

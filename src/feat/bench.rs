@@ -22,6 +22,30 @@ pub type BenchInit = fn() -> Bench;
 #[distributed_slice]
 pub static BENCHMARKS: [BenchInit];
 
+pub trait BenchResultRequestExt {
+    #[must_use]
+    fn save_to(self, result: &mut BenchResult) -> Self;
+}
+
+impl BenchResultRequestExt for PromptRequest {
+    fn save_to(self, result: &mut BenchResult) -> Self {
+        result.push_request(self.clone());
+        self
+    }
+}
+
+pub trait BenchResultResponseExt {
+    #[must_use]
+    fn save_to(self, result: &mut BenchResult) -> Self;
+}
+
+impl BenchResultResponseExt for Response {
+    fn save_to(self, result: &mut BenchResult) -> Self {
+        result.push_response(self.clone());
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
     /// Unique hash generated from model+run number+bench

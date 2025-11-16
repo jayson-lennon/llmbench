@@ -10,7 +10,8 @@ mod bench {
 
     use crate::feat::{
         bench::{
-            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult,
+            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, BenchResultRequestExt,
+            BenchResultResponseExt,
             helper::{ResponseExt, assistant_message, user_message},
         },
         completion::{
@@ -31,13 +32,23 @@ mod bench {
         ctx: BenchCtx,
     ) -> Result<BenchResult, Report<CompletionError>> {
         let bench = BenchId(ID.to_string());
+        let mut result = BenchResult {
+            hash: ctx.run_hash,
+            bench: bench.clone(),
+            model: ctx.model.clone(),
+            requests: vec![],
+            responses: vec![],
+        };
 
         let request_1 = PromptRequest::builder()
             .model(ctx.model.to_string())
             .messages(vec![user_message(PROMPT_1)])
-            .build();
+            .build()
+            .save_to(&mut result);
 
-        let response_1 = complete(&api, request_1.clone(), &ctx.model, &bench).await?;
+        let response_1 = complete(&api, request_1.clone(), &ctx.model, &bench)
+            .await?
+            .save_to(&mut result);
 
         let request_2 = PromptRequest::builder()
             .model(ctx.model.to_string())
@@ -45,17 +56,14 @@ mod bench {
                 user_message(PROMPT_2),
                 assistant_message(response_1.get_assistant_message().unwrap_or_default()),
             ])
-            .build();
+            .build()
+            .save_to(&mut result);
 
-        let response_2 = complete(&api, request_2.clone(), &ctx.model, &bench).await?;
+        let _ = complete(&api, request_2.clone(), &ctx.model, &bench)
+            .await?
+            .save_to(&mut result);
 
-        Ok(BenchResult {
-            hash: ctx.run_hash,
-            bench,
-            model: ctx.model.clone(),
-            requests: vec![request_1, request_2],
-            responses: vec![response_1, response_2],
-        })
+        Ok(result)
     }
 
     const PROMPT_1: &str = r#"

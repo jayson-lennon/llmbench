@@ -10,7 +10,8 @@ mod bench {
 
     use crate::feat::{
         bench::{
-            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult,
+            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, BenchResultRequestExt,
+            BenchResultResponseExt,
             helper::{ResponseExt, user_message},
         },
         completion::{
@@ -43,11 +44,12 @@ mod bench {
             let metaprompt_input = PromptRequest::builder()
                 .model(ctx.model.to_string())
                 .messages(vec![user_message(METAPROMPT)])
-                .build();
-            result.push_request(metaprompt_input.clone());
-            complete(&api, metaprompt_input.clone(), &ctx.model, &bench).await?
+                .build()
+                .save_to(&mut result);
+            complete(&api, metaprompt_input.clone(), &ctx.model, &bench)
+                .await?
+                .save_to(&mut result)
         };
-        result.push_response(prompt.clone());
 
         let prompt = format!(
             "{}\n{}",
@@ -58,11 +60,12 @@ mod bench {
         let request = PromptRequest::builder()
             .model(ctx.model.to_string())
             .messages(vec![user_message(prompt)])
-            .build();
+            .build()
+            .save_to(&mut result);
 
-        result.push_request(request.clone());
-        let response = complete(&api, request.clone(), &ctx.model, &bench).await?;
-        result.push_response(response);
+        let _ = complete(&api, request.clone(), &ctx.model, &bench)
+            .await?
+            .save_to(&mut result);
 
         Ok(result)
     }
