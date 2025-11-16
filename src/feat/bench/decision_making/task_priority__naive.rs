@@ -10,7 +10,7 @@ mod bench {
 
     use crate::feat::{
         bench::{
-            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, common::user_message,
+            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, helper::user_message,
         },
         completion::{
             PromptRequest,

@@ -11,7 +11,7 @@ mod bench {
     use crate::feat::{
         bench::{
             BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult,
-            common::{ResponseExt, assistant_message, user_message},
+            helper::{ResponseExt, assistant_message, user_message},
         },
         completion::{
             PromptRequest,

@@ -1,5 +1,5 @@
-pub mod common;
 pub mod decision_making;
+pub mod helper;
 
 use crate::feat::completion::PromptRequest;
 use crate::feat::completion::worker::{CompletionError, RunHash};
