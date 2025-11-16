@@ -65,8 +65,8 @@ impl ScoreFormatter {
             bench_width,
             model_width,
             result_width: ansi_width(MARK_PASS),
-            passed_width: ansi_width(HEADER_PASSED),
-            output_tokens_width: ansi_width(HEADER_OUTPUT_TOKENS),
+            passed_width: ansi_width(HEADER_PASSED) + 3,
+            output_tokens_width: ansi_width(HEADER_OUTPUT_TOKENS) + 2,
             cost_width: ansi_width(HEADER_COST),
         }
     }
@@ -121,7 +121,7 @@ impl ScoreFormatter {
                     bench = bench.pad(self.bench_width),
                     model = model.pad(self.model_width),
                     result_str = result_str.pad(self.result_width),
-                    passed_str = passed_str.pad(self.passed_width),
+                    passed_str = passed_str.center(self.passed_width).pad(self.passed_width),
                     n_tokens = n_tokens.to_string().pad(self.output_tokens_width),
                     cost = cost_str.pad(self.cost_width)
                 );
@@ -190,7 +190,7 @@ impl ScoreFormatter {
                 bench = "".pad(self.bench_width),
                 model = "".pad(self.model_width),
                 pct_pass = pct_pass.pad(self.result_width),
-                npassed = passed_str.pad(self.passed_width),
+                npassed = passed_str.center(self.passed_width).pad(self.passed_width),
                 ntokens = totals.tokens.to_string().pad(self.output_tokens_width),
                 cost = cost_str.pad(self.cost_width)
             );
@@ -342,6 +342,7 @@ fn pad_str(input: &str, amount: usize, ch: char) -> Cow<'_, str> {
 trait PadExt {
     fn pad(&self, len: usize) -> Cow<'_, str>;
     fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str>;
+    fn center(&self, width: usize) -> Cow<'_, str>;
 }
 
 impl PadExt for String {
@@ -352,6 +353,47 @@ impl PadExt for String {
     fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
         pad_str(self.as_str(), len, ch)
     }
+
+    fn center(&self, width: usize) -> Cow<'_, str> {
+        let text_size = ansi_width(self);
+        if text_size < width.saturating_sub(1) {
+            // |xx       | (9 wide, 2 len)
+            // |   xx    | (9-2) = 7/2 = 3.5(trunc) = 3
+            let padding = (width - text_size) / 2;
+            let mut text = String::new();
+            text.extend((0..padding).map(|_| ' '));
+            text.push_str(self);
+            text.extend((0..padding).map(|_| ' '));
+            Cow::Owned(text)
+        } else {
+            Cow::Borrowed(self)
+        }
+    }
+}
+
+impl PadExt for Cow<'_, str> {
+    fn pad(&self, len: usize) -> Cow<'_, str> {
+        pad_str(self, len, ' ')
+    }
+    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
+        pad_str(self, len, ch)
+    }
+
+    fn center(&self, width: usize) -> Cow<'_, str> {
+        let text_size = ansi_width(self);
+        if text_size < width.saturating_sub(1) {
+            // |xx       | (9 wide, 2 len)
+            // |   xx    | (9-2) = 7/2 = 3.5(trunc) = 3
+            let padding = (width - text_size) / 2;
+            let mut text = String::new();
+            text.extend((0..padding).map(|_| ' '));
+            text.push_str(self);
+            text.extend((0..padding).map(|_| ' '));
+            Cow::Owned(text)
+        } else {
+            Cow::Borrowed(self)
+        }
+    }
 }
 
 impl PadExt for &'static str {
@@ -360,6 +402,22 @@ impl PadExt for &'static str {
     }
     fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
         pad_str(self, len, ch)
+    }
+
+    fn center(&self, width: usize) -> Cow<'_, str> {
+        let text_size = ansi_width(self);
+        if text_size < width.saturating_sub(1) {
+            // |xx       | (9 wide, 2 len)
+            // |   xx    | (9-2) = 7/2 = 3.5(trunc) = 3
+            let padding = (width - text_size) / 2;
+            let mut text = String::new();
+            text.extend((0..padding).map(|_| ' '));
+            text.push_str(self);
+            text.extend((0..padding).map(|_| ' '));
+            Cow::Owned(text)
+        } else {
+            Cow::Borrowed(self)
+        }
     }
 }
 
