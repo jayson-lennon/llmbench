@@ -12,9 +12,11 @@ const MARK_FAIL: &str = "❌ Fail";
 const HEADER_BENCH: &str = "bench";
 const HEADER_MODEL: &str = "model";
 const HEADER_RESULT: &str = "result";
-const HEADER_PASSES: &str = "passes";
+const HEADER_PASSED: &str = "passed";
 const HEADER_OUTPUT_TOKENS: &str = "tokens";
 const HEADER_COST: &str = "cost ($USD)    ";
+
+const HEADER_SUMMARY_PCT_PASS: &str = "% pass";
 
 use crate::{
     feat::cli::eval::SortColumn,
@@ -36,8 +38,8 @@ pub struct ScoreFormatter {
     /// Width of the "result" column.
     result_width: usize,
 
-    /// Width of the "passes" column.
-    passes_width: usize,
+    /// Width of the "passed" column.
+    passed_width: usize,
 
     /// Width of the "output tokens" column.
     output_tokens_width: usize,
@@ -63,17 +65,18 @@ impl ScoreFormatter {
             bench_width,
             model_width,
             result_width: ansi_width(MARK_PASS),
-            passes_width: ansi_width(HEADER_PASSES),
+            passed_width: ansi_width(HEADER_PASSED),
             output_tokens_width: ansi_width(HEADER_OUTPUT_TOKENS),
             cost_width: ansi_width(HEADER_COST),
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn print(&self, sort_column: SortColumn) {
         let div = " | ".fg::<Gray>().to_string();
         self.print_header(&div);
 
-        let table_width = self.print_line_under_header();
+        let table_width = self.print_table_width_line();
 
         let mut scores = self.scores.iter().collect::<Vec<_>>();
         scores.sort_by(|(a, _), (b, _)| match sort_column {
@@ -81,32 +84,44 @@ impl ScoreFormatter {
             SortColumn::Model => a.model_id.cmp(&b.model_id),
         });
 
+        let mut totals = Totals::default();
+
         // scores table
         {
             // summary line
             for (key, scores) in &self.scores {
                 let n_runs = scores.len();
-                let n_passes = get_number_of_passed_tests(scores);
-                let passed_all = n_passes == n_runs;
+                let n_passed = get_number_of_passed_tests(scores);
+                {
+                    totals.passed += n_passed;
+                    totals.runs += n_runs;
+                }
+                let passed_all = n_passed == n_runs;
 
                 let result_str = get_formatted_pass_fail_section(passed_all);
 
-                let passes_str = get_formatted_passes_section(n_runs, n_passes, passed_all);
+                let passed_str = get_formatted_passed_section(n_runs, n_passed, passed_all);
 
                 let n_tokens = get_number_of_tokens(scores);
+                {
+                    totals.tokens += n_tokens;
+                }
                 let cost = get_monetary_cost(scores);
+                {
+                    totals.cost += cost;
+                }
 
                 let bench = key.bench_id.to_string();
                 let model = key.model_id.to_string();
 
-                let cost_str = format!("${:.9}", cost.to_string());
+                let cost_str = format!("${cost:.9}");
 
                 println!(
-                    "{div}{bench}{div}{model}{div}{result_str}{div}{passes_str}{div}{n_tokens}{div}{cost}{div}",
+                    "{div}{bench}{div}{model}{div}{result_str}{div}{passed_str}{div}{n_tokens}{div}{cost}{div}",
                     bench = bench.pad(self.bench_width),
                     model = model.pad(self.model_width),
                     result_str = result_str.pad(self.result_width),
-                    passes_str = passes_str.pad(self.passes_width),
+                    passed_str = passed_str.pad(self.passed_width),
                     n_tokens = n_tokens.to_string().pad(self.output_tokens_width),
                     cost = cost_str.pad(self.cost_width)
                 );
@@ -139,31 +154,85 @@ impl ScoreFormatter {
                 }
             }
         }
-    }
 
-    fn print_header(&self, div: &str) {
+        // total summary
         {
+            let width = self.table_width();
+            let divider = format!(" {}", "".pad_with_char(width - 2, '='));
+
+            println!("{divider}", divider = divider.fg::<Gray>());
+
             let header = format!(
-                "{div}{bench}{div}{model}{div}{result}{div}{npasses}{div}{ntokens}{div}{cost}{div}",
-                bench = HEADER_BENCH.pad(self.bench_width),
-                model = HEADER_MODEL.pad(self.model_width),
-                result = HEADER_RESULT.pad(self.result_width),
-                npasses = HEADER_PASSES.pad(self.passes_width),
+                "{div}{bench}{div}{model}{div}{pct_pass}{div}{npassed}{div}{ntokens}{div}{cost}{div}",
+                bench = "".pad(self.bench_width),
+                model = "".pad(self.model_width),
+                pct_pass = HEADER_SUMMARY_PCT_PASS.pad(self.result_width),
+                npassed = HEADER_PASSED.pad(self.passed_width),
                 ntokens = HEADER_OUTPUT_TOKENS.pad(self.output_tokens_width),
                 cost = HEADER_COST.pad(self.cost_width)
             );
-            println!("{header}",);
+            println!("{header}");
+            self.print_table_width_line();
+
+            let pct_pass = format!("{:.2}%", (totals.pct_pass() * 100.0));
+            let cost_str = format!("${:.9}", totals.cost);
+            let passed_str = {
+                let passed = if totals.passed == totals.runs {
+                    format!("{}", totals.passed).fg::<Cyan>().to_string()
+                } else {
+                    format!("{}", totals.passed).fg::<Red>().to_string()
+                };
+                let passed_str = format!("{}/{}", passed, totals.runs.to_string().fg::<Cyan>());
+                passed_str
+            };
+            let summary_line = format!(
+                "{div}{bench}{div}{model}{div}{pct_pass}{div}{npassed}{div}{ntokens}{div}{cost}{div}",
+                bench = "".pad(self.bench_width),
+                model = "".pad(self.model_width),
+                pct_pass = pct_pass.pad(self.result_width),
+                npassed = passed_str.pad(self.passed_width),
+                ntokens = totals.tokens.to_string().pad(self.output_tokens_width),
+                cost = cost_str.pad(self.cost_width)
+            );
+            println!("{summary_line}");
         }
     }
 
-    fn print_line_under_header(&self) -> TableWidth {
+    fn print_header(&self, div: &str) {
+        let header = format!(
+            "{div}{bench}{div}{model}{div}{result}{div}{npassed}{div}{ntokens}{div}{cost}{div}",
+            bench = HEADER_BENCH.pad(self.bench_width),
+            model = HEADER_MODEL.pad(self.model_width),
+            result = HEADER_RESULT.pad(self.result_width),
+            npassed = HEADER_PASSED.pad(self.passed_width),
+            ntokens = HEADER_OUTPUT_TOKENS.pad(self.output_tokens_width),
+            cost = HEADER_COST.pad(self.cost_width)
+        );
+        println!("{header}",);
+    }
+
+    fn table_width(&self) -> TableWidth {
         let plus = " + ";
         let line = format!(
-            "{plus}{bench}{plus}{model}{plus}{result}{plus}{npasses}{plus}{ntokens}{plus}{cost}{plus}",
+            "{plus}{bench}{plus}{model}{plus}{result}{plus}{npassed}{plus}{ntokens}{plus}{cost}{plus}",
             bench = "".pad_with_char(self.bench_width, '-'),
             model = "".pad_with_char(self.model_width, '-'),
             result = "".pad_with_char(self.result_width, '-'),
-            npasses = "".pad_with_char(self.passes_width, '-'),
+            npassed = "".pad_with_char(self.passed_width, '-'),
+            ntokens = "".pad_with_char(self.output_tokens_width, '-'),
+            cost = "".pad_with_char(self.cost_width, '-'),
+        );
+        ansi_width(&line)
+    }
+
+    fn print_table_width_line(&self) -> TableWidth {
+        let plus = " + ";
+        let line = format!(
+            "{plus}{bench}{plus}{model}{plus}{result}{plus}{npassed}{plus}{ntokens}{plus}{cost}{plus}",
+            bench = "".pad_with_char(self.bench_width, '-'),
+            model = "".pad_with_char(self.model_width, '-'),
+            result = "".pad_with_char(self.result_width, '-'),
+            npassed = "".pad_with_char(self.passed_width, '-'),
             ntokens = "".pad_with_char(self.output_tokens_width, '-'),
             cost = "".pad_with_char(self.cost_width, '-'),
         );
@@ -196,14 +265,14 @@ fn get_formatted_pass_fail_section(passed_all: bool) -> String {
     }
 }
 
-fn get_formatted_passes_section(n_runs: usize, n_passes: usize, passed_all: bool) -> String {
-    let n_passes_str = if passed_all {
-        format!("{n_passes}").fg::<Cyan>().to_string()
+fn get_formatted_passed_section(n_runs: usize, n_passed: usize, passed_all: bool) -> String {
+    let n_passed_str = if passed_all {
+        format!("{n_passed}").fg::<Cyan>().to_string()
     } else {
-        format!("{n_passes}").fg::<Red>().to_string()
+        format!("{n_passed}").fg::<Red>().to_string()
     };
     let n_runs = format!("{n_runs}").fg::<Cyan>().to_string();
-    format!("{n_passes_str}/{n_runs}")
+    format!("{n_passed_str}/{n_runs}")
 }
 
 fn get_chat_summary(response: &ScoredResponse) -> Vec<ChatSummary> {
@@ -298,4 +367,19 @@ impl PadExt for &'static str {
 struct ChatSummary {
     _role: String,
     content: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct Totals {
+    passed: usize,
+    runs: usize,
+    tokens: u32,
+    cost: f64,
+}
+
+impl Totals {
+    #[allow(clippy::cast_precision_loss)]
+    fn pct_pass(&self) -> f64 {
+        self.passed as f64 / self.runs as f64
+    }
 }
