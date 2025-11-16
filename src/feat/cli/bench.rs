@@ -115,7 +115,7 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
     let mut set = JoinSet::new();
 
     let result_writer = tokio::task::spawn(async move {
-        spawn_result_writer(shared_args.results, rx).await;
+        spawn_result_writer(shared_args.results, total_requests, rx).await;
     });
 
     for (model, requests) in requests {
@@ -127,14 +127,8 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
 
     tracing::trace!(count = set.len(), "tasks spawned");
 
-    let mut completed = 0;
     while (set.join_next().await).is_some() {
-        completed += 1;
-        tracing::info!(
-            remaining = (total_requests - completed),
-            total = total_requests,
-            "job status"
-        );
+        tracing::info!(remaining = set.len(), "task finished");
     }
 
     if let Err(e) = tx.send(ResultWriterCmd::Quit) {

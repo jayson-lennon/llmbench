@@ -16,14 +16,21 @@ pub enum ResultWriterCmd {
     Quit,
 }
 
-pub async fn spawn_result_writer<P>(path: P, mut rx: ResultReceiver)
+pub async fn spawn_result_writer<P>(path: P, total_requests: usize, mut rx: ResultReceiver)
 where
     P: Into<PathBuf>,
 {
+    let mut completed = 0;
     let path = path.into();
     while let Some(cmd) = rx.recv().await {
         match cmd {
             ResultWriterCmd::SaveResult(result) => {
+                completed += 1;
+                tracing::info!(
+                    remaining = (total_requests.saturating_sub(completed)),
+                    total = total_requests,
+                    "received result"
+                );
                 if let Err(e) = write_to_ndjson(path.clone(), &result).await {
                     tracing::error!(err=?e, "failed to save results");
                 } else {
