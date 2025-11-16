@@ -15,6 +15,10 @@ impl ModelId {
     pub const fn len(&self) -> usize {
         self.0.len()
     }
+
+    pub const fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]

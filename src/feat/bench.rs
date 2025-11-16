@@ -1,27 +1,47 @@
-pub mod container;
-pub mod loader;
+pub mod decision_making;
 
-use std::str::FromStr;
-
-pub use container::{AllBenchResults, Bench, Benches};
-
+use crate::feat::completion::PromptRequest;
+use crate::feat::completion::worker::{CompletionError, RunHash};
+use crate::feat::models::ModelId;
+use derive_more::Debug;
 use derive_more::Display;
 use error_stack::{Report, ResultExt};
+use futures::future::{BoxFuture, FutureExt};
+use linkme::distributed_slice;
+use openrouter::OpenRouter;
 use openrouter::completions::Response;
+use openrouter::completions::request::{Content, Message};
+use openrouter::completions::response::Choice;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use std::sync::Arc;
+use std::{io::ErrorKind, path::Path};
+use tokio::{fs::OpenOptions, io::AsyncReadExt};
 
-use crate::feat::completion::{PromptHash, PromptRequest};
+pub type BenchInit = fn() -> Bench;
+
+#[distributed_slice]
+pub static BENCHMARKS: [BenchInit];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
-    /// Hash generated from the `PromptRequest`. This prevents duplicate requests.
-    pub hash: PromptHash,
+    /// Unique hash generated from model+run number+bench
+    pub hash: RunHash,
     /// The name of the bench.
     pub bench: BenchId,
-    /// All data sent
-    pub request: PromptRequest,
+    /// The model used.
+    pub model: ModelId,
+    /// All messages sent
+    pub requests: Vec<PromptRequest>,
     /// All responses
     pub responses: Vec<Response>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct BenchCtx {
+    pub run_number: u32,
+    pub model: ModelId,
+    pub run_hash: RunHash,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -52,6 +72,217 @@ impl FromStr for BenchId {
             Ok(Self(s.to_string()))
         } else {
             Err(Report::from(BenchError)).attach("invalid id format (must be category/benchname)")
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AllBenchResults {
+    pub inner: Vec<BenchResult>,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("an AllBenchResultsError error occurred")]
+pub struct AllBenchResultsError;
+
+impl AllBenchResults {
+    pub async fn load<P>(path: P) -> Result<Self, Report<AllBenchResultsError>>
+    where
+        P: AsRef<Path>,
+    {
+        let file = OpenOptions::new()
+            .create(false)
+            .read(true)
+            .open(&path)
+            .await;
+        let mut file = match file {
+            Ok(file) => file,
+            Err(e) => match e.kind() {
+                ErrorKind::NotFound => return Ok(Self { inner: vec![] }),
+                _ => {
+                    return Err(e).change_context(AllBenchResultsError).attach_with(|| {
+                        format!(
+                            "failed to open results file at '{}'",
+                            path.as_ref().display()
+                        )
+                    });
+                }
+            },
+        };
+
+        let mut buf = String::new();
+        file.read_to_string(&mut buf)
+            .await
+            .change_context(AllBenchResultsError)
+            .attach_with(|| {
+                format!(
+                    "failed to read results file at '{}'",
+                    path.as_ref().display()
+                )
+            })?;
+
+        let mut results = Vec::new();
+        for result in buf.lines() {
+            let result: BenchResult = serde_json::from_str(result)
+                .change_context(AllBenchResultsError)
+                .attach("deserialization eror")?;
+            results.push(result);
+        }
+        Ok(Self { inner: results })
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, BenchResult> {
+        self.inner.iter()
+    }
+}
+
+impl IntoIterator for AllBenchResults {
+    type Item = BenchResult;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a AllBenchResults {
+    type Item = &'a BenchResult;
+    type IntoIter = std::slice::Iter<'a, BenchResult>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.iter()
+    }
+}
+
+impl Extend<BenchResult> for AllBenchResults {
+    fn extend<T: IntoIterator<Item = BenchResult>>(&mut self, iter: T) {
+        self.inner.extend(iter);
+    }
+}
+
+impl FromIterator<BenchResult> for AllBenchResults {
+    fn from_iter<T: IntoIterator<Item = BenchResult>>(iter: T) -> Self {
+        Self {
+            inner: Vec::from_iter(iter),
+        }
+    }
+}
+
+type BenchCallback = BoxFuture<'static, Result<BenchResult, Report<CompletionError>>>;
+type BenchFactory = Arc<dyn Fn(Arc<OpenRouter>, BenchCtx) -> BenchCallback + Send + Sync + 'static>;
+
+/// Stores the function pointer/closure that can generate the BoxFuture.
+#[derive(Debug, Clone)]
+pub struct Bench {
+    pub id: BenchId,
+    #[debug(skip)]
+    factory: BenchFactory,
+}
+
+impl Bench {
+    /// Creates a new job by boxing the provided factory closure.
+    pub fn new<F, Fut>(id: BenchId, f: F) -> Self
+    where
+        F: Fn(Arc<OpenRouter>, BenchCtx) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<BenchResult, Report<CompletionError>>> + Send + 'static,
+    {
+        Bench {
+            id,
+            factory: Arc::new(move |api, ctx| f(api, ctx).boxed()),
+        }
+    }
+
+    pub fn create_callback(&self, api: Arc<OpenRouter>, ctx: BenchCtx) -> BenchCallback {
+        (self.factory)(api, ctx)
+    }
+}
+
+#[derive(Debug)]
+pub struct Benches {
+    pub benches: Vec<Bench>,
+}
+
+impl Benches {
+    pub fn contains(&self, id: &BenchId) -> bool {
+        self.benches.iter().any(|bench| &bench.id == id)
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, Bench> {
+        self.benches.iter()
+    }
+}
+
+impl IntoIterator for Benches {
+    type Item = Bench;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.benches.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Benches {
+    type Item = &'a Bench;
+    type IntoIter = std::slice::Iter<'a, Bench>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.benches.iter()
+    }
+}
+
+impl FromIterator<Bench> for Benches {
+    fn from_iter<I: IntoIterator<Item = Bench>>(iter: I) -> Self {
+        Benches {
+            benches: iter.into_iter().collect(),
+        }
+    }
+}
+
+impl Extend<Bench> for Benches {
+    fn extend<T: IntoIterator<Item = Bench>>(&mut self, iter: T) {
+        self.benches.extend(iter);
+    }
+}
+
+/// Create a new user message.
+pub fn user_message<M>(msg: M) -> Message
+where
+    M: Into<String>,
+{
+    let msg = msg.into();
+    Message::User {
+        content: Content::Plain(msg),
+        name: None,
+        cache_control: None,
+    }
+}
+
+/// Create a new assistant message.
+pub fn assistant_message<M>(msg: M) -> Message
+where
+    M: Into<String>,
+{
+    let msg = msg.into();
+    Message::Assistant {
+        content: Some(Content::Plain(msg)),
+        name: None,
+        tool_calls: None,
+    }
+}
+
+trait ResponseExt {
+    fn get_assistant_message(&self) -> Option<String>;
+}
+
+impl ResponseExt for Response {
+    fn get_assistant_message(&self) -> Option<String> {
+        if let Some(choice) = self.choices.first() {
+            match choice {
+                Choice::NonStreaming(choice) => choice.message.content.clone(),
+                _ => None,
+            }
+        } else {
+            None
         }
     }
 }

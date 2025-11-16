@@ -20,7 +20,7 @@ const HEADER_SUMMARY_PCT_PASS: &str = "% pass";
 
 use crate::{
     feat::cli::eval::SortColumn,
-    feat::evaluator::score::{ScoredResponse, Scores},
+    feat::evaluator::score::{ScoredBench, Scores},
 };
 
 type TableWidth = usize;
@@ -53,11 +53,11 @@ impl ScoreFormatter {
         let mut bench_width = 1;
         let mut model_width = 1;
         for score in scores.values().flatten() {
-            if score.response.bench.len() > bench_width {
-                bench_width = score.response.bench.len();
+            if score.result.bench.len() > bench_width {
+                bench_width = score.result.bench.len();
             }
-            if score.response.request.model.len() > model_width {
-                model_width = score.response.request.model.len();
+            if score.result.model.len() > model_width {
+                model_width = score.result.model.len();
             }
         }
         Self {
@@ -250,7 +250,7 @@ fn get_formatted_response_number(response_number: usize, pass: bool) -> String {
     }
 }
 
-fn get_number_of_passed_tests(scores: &[ScoredResponse]) -> usize {
+fn get_number_of_passed_tests(scores: &[ScoredBench]) -> usize {
     scores.iter().fold(0, |pass, response| {
         let diff = usize::from(response.score.pass);
         pass + diff
@@ -275,9 +275,9 @@ fn get_formatted_passed_section(n_runs: usize, n_passed: usize, passed_all: bool
     format!("{n_passed_str}/{n_runs}")
 }
 
-fn get_chat_summary(response: &ScoredResponse) -> Vec<ChatSummary> {
+fn get_chat_summary(response: &ScoredBench) -> Vec<ChatSummary> {
     response
-        .response
+        .result
         .responses
         .iter()
         .flat_map(|res| {
@@ -295,10 +295,10 @@ fn get_chat_summary(response: &ScoredResponse) -> Vec<ChatSummary> {
         .collect::<Vec<_>>()
 }
 
-fn get_monetary_cost(scores: &[ScoredResponse]) -> f64 {
+fn get_monetary_cost(scores: &[ScoredBench]) -> f64 {
     scores
         .iter()
-        .flat_map(|res| &res.response.responses)
+        .flat_map(|res| &res.result.responses)
         .fold(0.0, |cost, res| {
             cost + res
                 .usage
@@ -308,10 +308,10 @@ fn get_monetary_cost(scores: &[ScoredResponse]) -> f64 {
         })
 }
 
-fn get_number_of_tokens(scores: &[ScoredResponse]) -> u32 {
+fn get_number_of_tokens(scores: &[ScoredBench]) -> u32 {
     scores
         .iter()
-        .flat_map(|res| &res.response.responses)
+        .flat_map(|res| &res.result.responses)
         .fold(0, |tokens, res| {
             tokens
                 + res

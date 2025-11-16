@@ -23,10 +23,10 @@ impl GetMessageExt for &Choice {
     }
 }
 
-/// A scored response.
+/// A scored bench.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScoredResponse {
-    pub response: BenchResult,
+pub struct ScoredBench {
+    pub result: BenchResult,
     pub score: Score,
 }
 
@@ -71,34 +71,34 @@ pub struct BenchModelKey {
 /// All the scores.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scores {
-    scores: HashMap<BenchModelKey, Vec<ScoredResponse>>,
+    scores: HashMap<BenchModelKey, Vec<ScoredBench>>,
 }
 
 impl Scores {
-    pub fn get(&self, k: &BenchModelKey) -> Option<&Vec<ScoredResponse>> {
+    pub fn get(&self, k: &BenchModelKey) -> Option<&Vec<ScoredBench>> {
         self.scores.get(k)
     }
 
     pub fn values(
         &self,
-    ) -> std::collections::hash_map::Values<'_, BenchModelKey, Vec<ScoredResponse>> {
+    ) -> std::collections::hash_map::Values<'_, BenchModelKey, Vec<ScoredBench>> {
         self.scores.values()
     }
 
-    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, BenchModelKey, Vec<ScoredResponse>> {
+    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, BenchModelKey, Vec<ScoredBench>> {
         self.scores.iter()
     }
 
     pub fn iter_mut(
         &mut self,
-    ) -> std::collections::hash_map::IterMut<'_, BenchModelKey, Vec<ScoredResponse>> {
+    ) -> std::collections::hash_map::IterMut<'_, BenchModelKey, Vec<ScoredBench>> {
         self.scores.iter_mut()
     }
 }
 
 impl IntoIterator for Scores {
-    type Item = (BenchModelKey, Vec<ScoredResponse>);
-    type IntoIter = std::collections::hash_map::IntoIter<BenchModelKey, Vec<ScoredResponse>>;
+    type Item = (BenchModelKey, Vec<ScoredBench>);
+    type IntoIter = std::collections::hash_map::IntoIter<BenchModelKey, Vec<ScoredBench>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.scores.into_iter()
@@ -106,8 +106,8 @@ impl IntoIterator for Scores {
 }
 
 impl<'a> IntoIterator for &'a Scores {
-    type Item = (&'a BenchModelKey, &'a Vec<ScoredResponse>);
-    type IntoIter = std::collections::hash_map::Iter<'a, BenchModelKey, Vec<ScoredResponse>>;
+    type Item = (&'a BenchModelKey, &'a Vec<ScoredBench>);
+    type IntoIter = std::collections::hash_map::Iter<'a, BenchModelKey, Vec<ScoredBench>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.scores.iter()
@@ -115,34 +115,34 @@ impl<'a> IntoIterator for &'a Scores {
 }
 
 impl<'a> IntoIterator for &'a mut Scores {
-    type Item = (&'a BenchModelKey, &'a mut Vec<ScoredResponse>);
-    type IntoIter = std::collections::hash_map::IterMut<'a, BenchModelKey, Vec<ScoredResponse>>;
+    type Item = (&'a BenchModelKey, &'a mut Vec<ScoredBench>);
+    type IntoIter = std::collections::hash_map::IterMut<'a, BenchModelKey, Vec<ScoredBench>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.scores.iter_mut()
     }
 }
 
-impl FromIterator<ScoredResponse> for Scores {
-    fn from_iter<T: IntoIterator<Item = ScoredResponse>>(iter: T) -> Self {
-        let scores: Vec<ScoredResponse> = iter.into_iter().collect();
+impl FromIterator<ScoredBench> for Scores {
+    fn from_iter<T: IntoIterator<Item = ScoredBench>>(iter: T) -> Self {
+        let benches: Vec<ScoredBench> = iter.into_iter().collect();
 
-        let mut aggregated: HashMap<BenchModelKey, Vec<ScoredResponse>> = HashMap::new();
+        let mut aggregated: HashMap<BenchModelKey, Vec<ScoredBench>> = HashMap::new();
 
-        for scored_response in scores {
+        for bench in benches {
             let key = BenchModelKey {
-                bench_id: scored_response.response.bench.clone(),
-                model_id: ModelId(scored_response.response.request.model.clone()),
+                bench_id: bench.result.bench.clone(),
+                model_id: bench.result.model.clone(),
             };
 
-            aggregated.entry(key).or_default().push(scored_response);
+            aggregated.entry(key).or_default().push(bench);
         }
         Scores { scores: aggregated }
     }
 }
 
-impl FromIterator<(BenchModelKey, Vec<ScoredResponse>)> for Scores {
-    fn from_iter<T: IntoIterator<Item = (BenchModelKey, Vec<ScoredResponse>)>>(iter: T) -> Self {
+impl FromIterator<(BenchModelKey, Vec<ScoredBench>)> for Scores {
+    fn from_iter<T: IntoIterator<Item = (BenchModelKey, Vec<ScoredBench>)>>(iter: T) -> Self {
         let mut scores = HashMap::new();
         for (k, v) in iter {
             scores.insert(k, v);

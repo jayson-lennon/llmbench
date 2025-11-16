@@ -1,34 +1,44 @@
-use std::collections::VecDeque;
+use std::hash::{Hash, Hasher};
+use std::{collections::VecDeque, sync::Arc};
 
 use error_stack::{Report, ResultExt};
-use openrouter::{
-    OpenRouter,
-    completions::{
-        Response,
-        request::{Content, Message},
-        response::Choice,
-    },
-};
+use openrouter::OpenRouter;
+use openrouter::completions::Response;
 use serde::{Deserialize, Serialize};
+use twox_hash::XxHash3_64;
 
+use crate::feat::bench::BenchId;
+use crate::feat::completion::PromptRequest;
 use crate::feat::{
-    bench::{Bench, BenchId, BenchResult},
-    completion::PromptRequest,
+    bench::{Bench, BenchCtx},
     models::ModelId,
     persistence::{ResultSender, ResultWriterCmd},
 };
 
-/// Everything needed to perform a benchmark.
-///
-/// A payload represents a single benchmark for a single model.
-///
-/// Payloads contain:
-/// - the bench info (name, prompts, etc)
-/// - the request (all config for sending the request)
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
+/// Unique hash assigned to a model+run+bench combination.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct RunHash(pub u64);
+
+#[derive(Debug)]
 pub struct RunPayload {
+    pub ctx: BenchCtx,
     pub bench: Bench,
-    pub prompt: PromptRequest,
+}
+
+impl RunPayload {
+    /// Returns the run hash for this particular model+run+bench combo.
+    ///
+    /// Note that this is NOT a hash of the [`RunPayload`] struct! It's used only to prevent
+    /// duplicate requests from being sent out.
+    pub fn get_run_hash(&self) -> RunHash {
+        const SEED: u64 = 1337;
+
+        let data = (self.ctx.clone(), self.bench.id.clone());
+
+        let mut hasher = XxHash3_64::with_seed(SEED);
+        data.hash(&mut hasher);
+        RunHash(hasher.finish())
+    }
 }
 
 /// Configuration required to start a new completion run.
@@ -49,82 +59,28 @@ async fn run_impl(
     model: ModelId,
     mut payloads: VecDeque<RunPayload>,
 ) -> Result<(), Report<CompletionError>> {
-    let openrouter = OpenRouter::new(config.api_key);
+    let openrouter = Arc::new(OpenRouter::new(config.api_key));
 
-    while let Some(payload) = payloads.pop_front() {
-        let bench = payload.bench.id.clone();
-
-        // All chats will use this session as a base. The messages will get updated as responses come
-        // in.
-        let base_payload = payload.clone();
-
-        // Pull out the messages for the chat.
-        let mut bench_messages = payload
-            .prompt
-            .messages
-            .clone()
-            .into_iter()
-            .flatten()
-            .collect::<VecDeque<_>>();
-
-        // All messages in the current session.
-        let mut chat = Vec::new();
-
-        let mut responses = Vec::new();
-
-        while let Some(msg) = bench_messages.pop_front() {
-            let mut request = base_payload.clone();
-            // add the next benchmark message to the chat
-            chat.push(msg);
-
-            // clone the chat into the request prompt
-            request.prompt.messages = Some(chat.clone());
-
-            // generate a completion
-            let response = complete(&openrouter, request, &model, &bench).await?;
-
-            // If we get an assistant message back as the response, add it to the chat.
-            if let Some(choice) = response.choices.last()
-                && let Choice::NonStreaming(choice) = choice
-            {
-                let new_msg = extract_assistant_message(choice);
-
-                chat.push(new_msg);
+    while let Some(mut payload) = payloads.pop_front() {
+        payload.ctx.run_hash = payload.get_run_hash();
+        let bench = payload
+            .bench
+            .create_callback(Arc::clone(&openrouter), payload.ctx);
+        match bench.await {
+            Ok(result) => {
+                config
+                    .results_tx
+                    .send(ResultWriterCmd::SaveResult(result))
+                    .unwrap();
             }
-
-            // push the complete response for eval
-            responses.push(response);
+            Err(e) => {
+                tracing::error!(err=?e, "error");
+                return Err(e);
+            }
         }
-
-        let bench_result = BenchResult {
-            hash: payload.prompt.prompt_hash(),
-            bench: bench.clone(),
-            request: payload.prompt,
-            responses,
-        };
-
-        config
-            .results_tx
-            .send(ResultWriterCmd::SaveResult(bench_result))
-            .unwrap();
     }
 
     Ok(())
-}
-
-/// Converts an assistant response into an assistant request message in a chat session.
-fn extract_assistant_message(
-    choice: &openrouter::completions::response::NonStreamingChoice,
-) -> Message {
-    Message::Assistant {
-        content: choice
-            .message
-            .content
-            .as_ref()
-            .map(|msg| Content::Plain(msg.clone())),
-        name: None,
-        tool_calls: None,
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -134,20 +90,20 @@ pub enum CompletionErrorWrapper {
 }
 
 /// Run a completion request.
-async fn complete(
+pub async fn complete(
     api: &OpenRouter,
-    request: RunPayload,
+    request: PromptRequest,
     model: &ModelId,
     bench: &BenchId,
 ) -> Result<Response, Report<CompletionError>> {
-    tracing::info!(model=%model, bench=%model, "sending completion request");
+    tracing::info!(model=%model, bench=%bench, "sending completion request");
 
     // Add 1 minute timeout
     let timeout_duration = std::time::Duration::from_secs(60);
 
     match tokio::time::timeout(
         timeout_duration,
-        api.chat_completion(request.prompt.make_openrouter_request()),
+        api.chat_completion(request.make_openrouter_request()),
     )
     .await
     {
@@ -178,7 +134,7 @@ async fn complete(
         }
     }
 }
-
+//
 pub async fn run(config: RunConfig, model: ModelId, payloads: VecDeque<RunPayload>) {
     if let Err(e) = run_impl(config, model.clone(), payloads).await {
         tracing::error!(model=%model, err=?e, "an error occurred while processing a request");

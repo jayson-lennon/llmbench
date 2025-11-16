@@ -1,7 +1,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use crate::feat::{
-    bench::{AllBenchResults, BenchId, Benches},
+    bench::{AllBenchResults, BENCHMARKS, BenchId, Benches},
     cli::SharedArgs,
     completion::{self, PromptPayloadBatch, RunConfig},
     models::Models,
@@ -59,10 +59,7 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
             Err(er) => return Err(er),
         };
 
-        let benches = Benches::new(args.bench_path)
-            .await
-            .change_context(BenchError)
-            .attach("failed to load benches")?;
+        let benches = BENCHMARKS.iter().map(|init| init()).collect::<Benches>();
         if bench_ids.is_empty() {
             benches
         } else {

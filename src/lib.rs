@@ -1,4 +1,5 @@
 #![warn(clippy::pedantic)]
+#![allow(clippy::needless_raw_string_hashes)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::must_use_candidate)]

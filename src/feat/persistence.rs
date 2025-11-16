@@ -41,7 +41,7 @@ pub async fn spawn_result_writer<P>(
                 if let Err(e) = write_to_ndjson(path.clone(), &result).await {
                     tracing::error!(err=?e, "failed to save results");
                 } else {
-                    tracing::debug!(bench=%result.bench, model=result.request.model, "wrote result");
+                    tracing::debug!(bench=%result.bench, model=%result.model, "wrote result");
                 }
             }
             ResultWriterCmd::Quit => return,

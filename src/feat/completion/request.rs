@@ -3,20 +3,19 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use bon::Builder;
 use openrouter::completions::{
     Request,
-    request::{Content, Message, Stop, Tool, ToolChoice, Usage},
+    request::{Message, Stop, Tool, ToolChoice, Usage},
 };
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use twox_hash::XxHash3_64;
 
-use crate::{
-    feat::models::{ModelId, Models},
-    feat::{
-        bench::{AllBenchResults, Benches},
-        completion::RunPayload,
-    },
+use crate::feat::{
+    bench::{AllBenchResults, BenchCtx, Benches},
+    completion::{RunPayload, worker::RunHash},
+    models::{ModelId, Models},
 };
 
 const SEED: u64 = 1337;
@@ -24,9 +23,8 @@ const SEED: u64 = 1337;
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct PromptHash(pub u64);
 
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Builder)]
 pub struct PromptRequest {
-    pub run_number: u32,
     pub model: String,
     pub messages: Option<Vec<Message>>,
     pub prompt: Option<String>,
@@ -43,30 +41,6 @@ pub struct PromptRequest {
     pub repetition_penalty: Option<OrderedFloat<f64>>,
     pub min_p: Option<OrderedFloat<f64>>,
     pub top_a: Option<OrderedFloat<f64>>,
-}
-
-impl Default for PromptRequest {
-    fn default() -> Self {
-        PromptRequest {
-            run_number: 1,
-            model: String::new(),
-            messages: None,
-            prompt: None,
-            stop: None,
-            max_tokens: None,
-            temperature: None,
-            tools: None,
-            tool_choice: None,
-            seed: None,
-            top_p: None,
-            top_k: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            repetition_penalty: None,
-            min_p: None,
-            top_a: None,
-        }
-    }
 }
 
 impl PromptRequest {
@@ -124,7 +98,7 @@ impl PromptRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct PromptPayloadBatch {
     payloads: Vec<RunPayload>,
 }
@@ -137,9 +111,7 @@ impl PromptPayloadBatch {
     pub fn split_by_models(self) -> HashMap<ModelId, VecDeque<RunPayload>> {
         let mut map: HashMap<ModelId, VecDeque<RunPayload>> = HashMap::new();
         for payload in self.payloads {
-            let entry = map
-                .entry(ModelId(payload.prompt.model.clone()))
-                .or_default();
+            let entry = map.entry(payload.ctx.model.clone()).or_default();
             entry.push_back(payload);
         }
         map
@@ -151,7 +123,7 @@ impl PromptPayloadBatch {
         let initial_result_len = self.payloads.len();
         for result in results {
             self.payloads
-                .retain(|payload| payload.prompt.prompt_hash() != result.hash);
+                .retain(|payload| payload.get_run_hash() != result.hash);
         }
         let diff = initial_result_len - self.payloads.len();
         total_filtered += diff;
@@ -168,36 +140,13 @@ impl PromptPayloadBatch {
         for model in models {
             for bench in benches {
                 for run in 0..n_runs {
-                    let prompt = PromptRequest {
-                        // +1 here because the run counter starts at 1
-                        run_number: run + 1,
-                        model: model.clone(),
-                        messages: {
-                            let mut prompts = Vec::new();
-                            if let Some(system_prompt) = &bench.system_prompt {
-                                prompts.push(Message::System {
-                                    content: Content::Plain(system_prompt.clone()),
-                                    name: None,
-                                    cache_control: None,
-                                });
-                            }
-                            let user_prompts = bench
-                                .prompts
-                                .iter()
-                                .map(|prompt| Message::User {
-                                    content: Content::Plain(prompt.clone()),
-                                    name: None,
-                                    cache_control: None,
-                                })
-                                .collect::<Vec<_>>();
-                            prompts.extend(user_prompts);
-                            Some(prompts)
-                        },
-                        ..Default::default()
-                    };
                     payloads.push(RunPayload {
+                        ctx: BenchCtx {
+                            run_number: run,
+                            model: ModelId(model.clone()),
+                            run_hash: RunHash(0),
+                        },
                         bench: bench.clone(),
-                        prompt,
                     });
                 }
             }
