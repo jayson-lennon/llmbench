@@ -160,8 +160,7 @@ async fn complete(
             match e {
                 openrouter::Error::OpenRouter(e) => {
                     tracing::error!(err=?e, "an openrouter error occurred");
-                    Err(e)
-                        .map_err(CompletionErrorWrapper::OpenRouter)
+                    Err(CompletionErrorWrapper::OpenRouter(e))
                         .change_context(CompletionError)
                         .attach("failed to get chat completion")
                 }
