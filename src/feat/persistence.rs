@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use error_stack::{Report, ResultExt};
+use indicatif::ProgressBar;
 use serde::Serialize;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
@@ -17,8 +18,12 @@ pub enum ResultWriterCmd {
 }
 
 #[tracing::instrument(skip(path, rx))]
-pub async fn spawn_result_writer<P>(path: P, total_requests: usize, mut rx: ResultReceiver)
-where
+pub async fn spawn_result_writer<P>(
+    path: P,
+    total_requests: usize,
+    pb: ProgressBar,
+    mut rx: ResultReceiver,
+) where
     P: Into<PathBuf>,
 {
     let mut completed = 0;
@@ -27,6 +32,7 @@ where
         match cmd {
             ResultWriterCmd::SaveResult(result) => {
                 completed += 1;
+                pb.inc(1);
                 tracing::info!(
                     remaining = (total_requests.saturating_sub(completed)),
                     total = total_requests,

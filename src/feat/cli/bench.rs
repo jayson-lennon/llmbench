@@ -9,6 +9,7 @@ use crate::feat::{
 };
 use clap::Parser;
 use error_stack::{Report, ResultExt};
+use indicatif::ProgressBar;
 use tokio::task::JoinSet;
 
 #[derive(Debug, thiserror::Error)]
@@ -114,8 +115,10 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
 
     let mut set = JoinSet::new();
 
+    let pb = ProgressBar::new(total_requests as u64);
+
     let result_writer = tokio::task::spawn(async move {
-        spawn_result_writer(shared_args.results, total_requests, rx).await;
+        spawn_result_writer(shared_args.results, total_requests, pb, rx).await;
     });
 
     for (model, requests) in requests {
