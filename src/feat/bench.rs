@@ -36,6 +36,16 @@ pub struct BenchResult {
     pub responses: Vec<Response>,
 }
 
+impl BenchResult {
+    pub fn push_request(&mut self, request: PromptRequest) {
+        self.requests.push(request);
+    }
+
+    pub fn push_response(&mut self, response: Response) {
+        self.responses.push(response);
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BenchCtx {
     pub run_number: u32,

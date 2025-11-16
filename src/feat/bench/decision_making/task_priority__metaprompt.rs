@@ -44,15 +44,15 @@ mod bench {
                 .model(ctx.model.to_string())
                 .messages(vec![user_message(METAPROMPT)])
                 .build();
-            result.requests.push(metaprompt_input.clone());
+            result.push_request(metaprompt_input.clone());
             complete(&api, metaprompt_input.clone(), &ctx.model, &bench).await?
         };
-        result.responses.push(prompt.clone());
+        result.push_response(prompt.clone());
 
         let prompt = format!(
             "{}\n{}",
             prompt.get_assistant_message().unwrap_or_default(),
-            PROMPT_1
+            PROMPT
         );
 
         let request = PromptRequest::builder()
@@ -60,9 +60,9 @@ mod bench {
             .messages(vec![user_message(prompt)])
             .build();
 
-        result.requests.push(request.clone());
+        result.push_request(request.clone());
         let response = complete(&api, request.clone(), &ctx.model, &bench).await?;
-        result.responses.push(response);
+        result.push_response(response);
 
         Ok(result)
     }
@@ -90,7 +90,7 @@ When given a task description, follow these steps to generate an optimized promp
 You will be given a list of tasks for a solo video game developer to work on. Choose the most important task that should be completed next. The output format is the item by itself without additional commentary.
 "#;
 
-    const PROMPT_1: &str = r#"
+    const PROMPT: &str = r#"
 ---
 ** Task List **
 
