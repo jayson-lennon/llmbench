@@ -9,7 +9,9 @@ mod bench {
     use openrouter::OpenRouter;
 
     use crate::feat::{
-        bench::{BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, user_message},
+        bench::{
+            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, common::user_message,
+        },
         completion::{
             PromptRequest,
             worker::{CompletionError, complete},
