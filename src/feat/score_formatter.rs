@@ -137,7 +137,7 @@ impl ScoreFormatter {
                         let chat = get_chat_summary(response);
 
                         let response_number = response_index + 1;
-                        let pass = response.score.pass;
+                        let pass = response.score.passed;
                         // format individual messages
                         for (turn_index, message) in chat.iter().enumerate() {
                             let message = message.content.replace('\n', " ");
@@ -257,7 +257,7 @@ fn get_formatted_response_number(response_number: usize, pass: bool) -> String {
 
 fn get_number_of_passed_tests(scores: &[ScoredBench]) -> usize {
     scores.iter().fold(0, |pass, response| {
-        let diff = usize::from(response.score.pass);
+        let diff = usize::from(response.score.passed);
         pass + diff
     })
 }

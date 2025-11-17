@@ -129,7 +129,7 @@ mod eval {
                         .alphanumeric_only()
                         .trim()
                         == "pick a game engine";
-                    Score::builder().pass(pass).build()
+                    Score::builder().passed(pass).build()
                 }
                 _ => Score::fail(),
             },

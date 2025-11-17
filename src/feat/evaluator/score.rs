@@ -34,7 +34,7 @@ pub struct ScoredBench {
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct Score {
     /// When true, the model passed the bench
-    pub pass: bool,
+    pub passed: bool,
 
     /// Total cost incurred to run this bench.
     ///
@@ -52,12 +52,12 @@ pub struct Score {
 impl Score {
     /// Return a default failing score.
     pub fn fail() -> Self {
-        Score::builder().pass(false).build()
+        Score::builder().passed(false).build()
     }
 
     /// Return a default passing score.
     pub fn pass() -> Self {
-        Score::builder().pass(true).build()
+        Score::builder().passed(true).build()
     }
 }
 

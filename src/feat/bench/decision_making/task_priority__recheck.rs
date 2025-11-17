@@ -108,7 +108,7 @@ mod eval {
                         == "pick a game engine";
                     let pass_2 =
                         b.lowercase().remove_chat_tags().alphanumeric_only().trim() == "yes";
-                    Score::builder().pass(pass_1 && pass_2).build()
+                    Score::builder().passed(pass_1 && pass_2).build()
                 }
                 _ => Score::fail(),
             },

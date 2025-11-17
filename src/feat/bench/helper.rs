@@ -53,7 +53,7 @@ macro_rules! expect_response {
                             .trim()
                             .to_string();
                         let answer = processed == $expected;
-                        Score::builder().pass(answer).build()
+                        Score::builder().passed(answer).build()
                     }
                     _ => Score::fail(),
                 },
