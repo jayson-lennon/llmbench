@@ -18,7 +18,7 @@ This is an experimental application created for my own personal use to iterate o
 
 Only source installation is currently supported.
 
-1. Install Rust if not already: [rustup.rs](https://rustup.rs)
+1. Install Rust if not already installed: [rustup.rs](https://rustup.rs)
 2. Clone the repo and build:
 
 ```
