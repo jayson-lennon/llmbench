@@ -27,7 +27,7 @@ cd llmbench
 cargo build --release
 ```
 
-3. Add to `$PATH` or use `cargo run`
+3. Use `cargo run` (or set up your `$PATH`)
 
 ## Configuration
 
