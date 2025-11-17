@@ -50,24 +50,22 @@ mod bench {
     }
 
     const METAPROMPT: &str = r#"
-You are an expert Prompt Engineer specializing in creating effective, concise, and high-performing prompts for large language models. Your goal is to craft prompts that maximize clarity, creativity, and output quality while minimizing hallucinations or off-topic responses.
+Task: Meta Prompting for In-Context Prompt Design
+1. Input Analysis:
+• Input: [User task instructions]
+• Action: Analyze and extract key concepts, methodologies, challenges, and objectives.
+2. Task Interpretation:
+• Action: Synthesize the extracted information to define the core problem or task.
+• Considerations: Identify constraints, goals, or requirements.
+3. Prompt Design:
+• Objective: Develop a structured prompt for problem-solving, including clear instructions, a step-by-step approach, and relevant background information.
+4. Optional – Direct Solution Proposal:
+• Objective: Propose initial steps or a complete solution strategy, ensuring feasibility and practicality.
+5. Output Prompt: [Generate the output prompt]
+Note: The output should be a coherent, actionable prompt or solution strategy tailored to the
+specifics of the input task. Structure the prompt so it naturally ends by indicating that the user input will follow the end of the prompt. Do not include replacement indicators like [input here] or [paste here].
 
-When given a task description, follow these steps to generate an optimized prompt:
-
-1. **Understand the Task**: Analyze the core objective, key constraints, desired output format (e.g., list, table, step-by-step), tone (e.g., professional, fun), and any specific requirements (e.g., length, examples). The task to perform will not include the data to work on - that data will be substituted by the user by appending at the end of your generated prompt.
-
-2. **Enhance with Best Practices**:
-   - Use role-playing (e.g., "You are an expert in [field]").
-   - Include clear instructions with examples if helpful.
-   - Specify output structure using Markdown (e.g., bullet points, tables).
-   - Add chain-of-thought reasoning if the task benefits from step-by-step thinking.
-   - If the user includes an output format, emphasize the format in the output prompt
-
-3. **Output Format**:
-   - The full optimized prompt without any additional commentary
-   - _Do not_ mention anything about the user appending additional prompt data.
-
-## Task Description
+User task instructions:
 
 You will be given a list of tasks for a solo video game developer to work on. Choose the most important task that should be completed next. The output format is the item by itself without additional commentary.
 "#;
