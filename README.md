@@ -31,9 +31,11 @@ Only source installation is currently supported.
 
 ## Configuration
 
-The config file comes pre-loaded with many different models. However, due to the costs associated with running the application, only the free models are configured by default.
+**NOTE**: All models are commented out in the config file to avoid accidental costs. You _must_ edit the file for the tool to work.
 
-Update the `config.toml` with the models that you are interested in testing:
+The config file comes pre-loaded with some of the models available on OpenRouter at the time of publishing.
+
+Update the `config.toml` with the models that you are interested in testing. `llmbench` runs the benchmark against all models listed unless a CLI flag is used to bench a specific model. Model IDs are from [the model list](https://openrouter.ai/models) at OpenRouter:
 
 ```toml
 models = [
@@ -45,6 +47,8 @@ models = [
 ```
 
 - Set `OPENROUTER_API_KEY` environment variable for authentication. See the `.env.example` file.
+
+Note that free models will get rate-limited and aren't suitable for running multiple benches nor multi-turn benches.
 
 ## Usage
 
