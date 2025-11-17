@@ -9,7 +9,7 @@ use crate::feat::{
 };
 use clap::Parser;
 use error_stack::{Report, ResultExt};
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use tokio::task::JoinSet;
 
 #[derive(Debug, thiserror::Error)]
@@ -113,15 +113,17 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
     let config = RunConfig {
         api_key,
         results_tx: tx.clone(),
+        multibar: MultiProgress::new(),
     };
 
     let mut joinset = JoinSet::new();
 
-    let pb = ProgressBar::new(total_requests as u64).with_style(
+    let pb = config.multibar.add(ProgressBar::new(total_requests as u64));
+    pb.set_style(
         ProgressStyle::with_template(
             "{spinner} {msg} {bar:40.cyan/blue} {percent}% ({pos}/{len}) ETA: {eta} / Elapsed: {elapsed}",
         )
-        .expect("programming error: invalid spinner format string"),
+        .expect("programming error: invalid pb format string"),
     );
     pb.enable_steady_tick(Duration::from_millis(50));
     pb.set_message("Benching ");

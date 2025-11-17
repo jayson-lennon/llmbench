@@ -1,7 +1,9 @@
 use std::hash::{Hash, Hasher};
+use std::time::Duration;
 use std::{collections::VecDeque, sync::Arc};
 
 use error_stack::{Report, ResultExt};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use openrouter::OpenRouter;
 use openrouter::completions::Response;
 use serde::{Deserialize, Serialize};
@@ -19,6 +21,7 @@ use crate::feat::{
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RunHash(pub u64);
 
+/// Contains a benchmark and context.
 #[derive(Debug)]
 pub struct RunPayload {
     pub ctx: BenchCtx,
@@ -46,6 +49,7 @@ impl RunPayload {
 pub struct RunConfig {
     pub api_key: String,
     pub results_tx: ResultSender,
+    pub multibar: MultiProgress,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -61,6 +65,16 @@ async fn run_impl(
 ) -> Result<(), Report<CompletionError>> {
     let openrouter = Arc::new(OpenRouter::new(config.api_key));
 
+    let pb = config.multibar.add(ProgressBar::new(payloads.len() as u64));
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{percent}% (Benches {pos}/{len}) | {msg} | ETA: {eta} / Elapsed: {elapsed}",
+        )
+        .expect("programming error: invalid pb format string"),
+    );
+    pb.enable_steady_tick(Duration::from_millis(50));
+    pb.set_message(model.to_string());
+
     while let Some(mut payload) = payloads.pop_front() {
         payload.ctx.run_hash = payload.get_run_hash();
         let bench = payload
@@ -68,18 +82,21 @@ async fn run_impl(
             .create_callback(Arc::clone(&openrouter), payload.ctx);
         match bench.await {
             Ok(result) => {
+                pb.inc(1);
                 config
                     .results_tx
                     .send(ResultWriterCmd::SaveResult(result))
                     .unwrap();
             }
             Err(e) => {
+                pb.finish_and_clear();
                 tracing::error!(err=?e, "error");
                 config.results_tx.send(ResultWriterCmd::JobError).unwrap();
                 return Err(e);
             }
         }
     }
+    pb.finish_and_clear();
 
     Ok(())
 }
