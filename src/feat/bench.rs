@@ -22,7 +22,10 @@ pub(in crate::feat::bench) mod prelude {
         bench::{
             BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, BenchResultRequestExt,
             BenchResultResponseExt,
-            helper::{StringBenchExt, register_bench, register_eval, user_message},
+            helper::{
+                ResponseExt, StringBenchExt, assistant_message, register_bench, register_eval,
+                user_message,
+            },
         },
         completion::{
             PromptRequest,
