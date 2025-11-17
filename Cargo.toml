@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 ansi-width = "0.1.0"
-ascii_table = { version = "4.0.8", features = ["color_codes"] }
 bon = "3.8.1"
 clap = { version = "4.5.51", features = ["derive", "env"] }
 derive_more = { version = "2.0.1", features = ["full"] }

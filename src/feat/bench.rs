@@ -1,5 +1,36 @@
-pub mod decision_making;
 pub mod helper;
+
+/* *********************
+* bench modules below
+* ******************** */
+
+pub mod decision_making;
+
+/* *********************
+* end bench modules
+* ******************** */
+
+pub(in crate::feat::bench) mod prelude {
+    pub use std::sync::Arc;
+
+    pub use error_stack::Report;
+    pub use linkme::distributed_slice;
+    pub use openrouter::OpenRouter;
+    pub use openrouter::completions::response::Choice;
+
+    pub(in crate::feat::bench) use crate::feat::{
+        bench::{
+            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, BenchResultRequestExt,
+            BenchResultResponseExt,
+            helper::{StringBenchExt, register_bench, register_eval, user_message},
+        },
+        completion::{
+            PromptRequest,
+            worker::{CompletionError, complete},
+        },
+        evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
+    };
+}
 
 use crate::feat::completion::PromptRequest;
 use crate::feat::completion::worker::{CompletionError, RunHash};

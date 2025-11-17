@@ -31,7 +31,7 @@ pub struct BenchArgs {
     api_key: Option<String>,
 
     /// Number of runs per bench
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = 3)]
     n_runs: u32,
 
     /// Path to bench dir

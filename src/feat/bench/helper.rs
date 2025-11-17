@@ -7,6 +7,35 @@ use openrouter::completions::{
 };
 use regex::Regex;
 
+/// Register a new benchmark into the distributed slice
+macro_rules! register_bench {
+    ($bench:ident) => {
+        #[distributed_slice(BENCHMARKS)]
+        static BENCHMARK: BenchInit = init;
+
+        fn init() -> Bench {
+            Bench::new(BenchId(ID.to_string()), $bench)
+        }
+    };
+}
+pub(crate) use register_bench;
+
+/// Register a new evaluator into the distributed slice
+macro_rules! register_eval {
+    ($eval:ident) => {
+        #[distributed_slice(EVALUATORS)]
+        static EVALUATOR: EvaluatorInit = init;
+
+        fn init() -> Evaluator {
+            Evaluator {
+                bench: BenchId(ID.to_string()),
+                eval: $eval,
+            }
+        }
+    };
+}
+pub(crate) use register_eval;
+
 /// Create a new user message.
 pub(in crate::feat::bench) fn user_message<M>(msg: M) -> Message
 where
@@ -76,6 +105,7 @@ impl StringBenchExt for String {
         self.to_lowercase()
     }
 
+    /// Removes `<|tag|>` from the response.
     fn remove_chat_tags(&self) -> String {
         let re = chat_tag_re();
         re.replace_all(self, "").to_string()

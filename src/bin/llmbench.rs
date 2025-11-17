@@ -15,6 +15,7 @@ pub enum Command {
     Eval(EvalArgs),
 }
 
+/// A simple LLM benchmark tool.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
