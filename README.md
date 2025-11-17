@@ -117,14 +117,26 @@ You will see multi-turn responses marked as failed when _any part_ of benchmark 
 
 ## Adding Benchmarks & Evaluators
 
-Benchmarks and evaluators exist in the same benchmark module for organizational purposes. It's recommended to copy an existing benchmark to start with and then modify the relevant parts.
+Benchmarks and evaluators exist in the same benchmark module for organizational purposes. It's recommended to copy an existing benchmark to start with and then modify the relevant parts. Benchmark modules are in `src/feat/bench/`.
 
-Benchmark files have two submodules: `bench` and `eval`. Registration of the benchmark and evaluator both use a [distributed slice](https://docs.rs/linkme/latest/linkme/struct.DistributedSlice.html), so there is no need to change any other code when adding a new benchmark.
+Benchmark modules have two submodules: `bench` and `eval`. Registration of the benchmark and evaluator both use a [distributed slice](https://docs.rs/linkme/latest/linkme/struct.DistributedSlice.html), so there is no need to change any other code when adding a new benchmark.
 
-Here is a minimal example of a bench+evaluator:
+For simple benchmarks having one prompt and one response, you can use macros:
 
 ```rust
-const ID: &str = "example/foo";
+use crate::feat::bench::prelude::*;
+
+impl_simple_bench!(
+    "category/foo",
+    r#"Reply with the word "foo" without quotes and without additional comment"#,
+    expect_response!("foo")
+```
+
+If you need to perform additional processing, or have a multi-turn benchmark, then you'll need to use something like this:
+
+```rust
+// The ID is shared between the bench and the evaluator.
+const ID: &str = "category/foo";
 
 mod bench {
     use super::ID;
@@ -137,6 +149,7 @@ mod bench {
         ctx: BenchCtx,
     ) -> Result<BenchResult, Report<CompletionError>> {
         let bench = BenchId(ID.to_string());
+        // Need this to track all requests and responses.
         let mut result = BenchResult {
             hash: ctx.run_hash,
             bench: bench.clone(),
@@ -145,16 +158,22 @@ mod bench {
             responses: vec![],
         };
 
+        // Build a request.
         let request = PromptRequest::builder()
             .model(ctx.model.to_string())
+            // Each request can have any number of "user" or "assistant" messages.
             .messages(vec![user_message(PROMPT)])
             .build()
+            // Remember to save it so all the data is available for analysis.
             .save_to(&mut result);
 
+        // Use `complete` to send the request to the model.
         let _ = complete(&api, request.clone(), &ctx.model, &bench)
             .await?
+            // Remember to save it so all the data is available for analysis.
             .save_to(&mut result);
 
+        // When done, return the result.
         Ok(result)
     }
 
@@ -169,21 +188,24 @@ mod eval {
 
     fn eval(responses: &[Choice]) -> Score {
         match responses {
+            // Expecting a single message response.
             [a] => match a.get_message() {
                 Some(a) => {
                     let answer = a.lowercase().remove_chat_tags().alphanumeric_only().trim()
                         == "foo";
-                    Score::builder().pass(answer).build()
+                    Score::builder().passed(answer).build()
                 }
+                // Empty message is a fail
                 _ => Score::fail(),
             },
+            // Multiple messages is a fail
             _ => Score::fail(),
         }
     }
 }
 ```
 
-There are a handful of helper functions provided in the [helper.rs](src/feat/bench/helper.rs) file.
+Helper functions and macros for benches are provided in the [helper.rs](src/feat/bench/helper.rs) file.
 
 ## TODO
 
@@ -198,4 +220,4 @@ There are a handful of helper functions provided in the [helper.rs](src/feat/ben
 
 ## License
 
-[GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.txt)
+[GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.txt)
