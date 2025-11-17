@@ -37,6 +37,7 @@ models = [
     "meta-llama/llama-4-maverick",
 ]
 ```
+
 - Set `OPENROUTER_API_KEY` environment variable for authentication. See the `.env.example` file.
 
 ## Usage
@@ -172,6 +173,14 @@ mod eval {
 ```
 
 There are a handful of helper functions provided in the [helper.rs](src/feat/bench/helper.rs) file.
+
+## TODO
+
+- [ ] Use pass/fail colors for individual turns on multi-turn evaluations (instead of all red if any turn fails)
+- [ ] Sort output
+- [ ] Display more statistics in the summary line like average or median
+- [ ] Save evaluation results instead of re-running the evaluators each time
+- [ ] Less code to create benchmarks and evaluators.
 
 ## License
 
