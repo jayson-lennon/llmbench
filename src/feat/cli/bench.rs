@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, time::Duration};
 
 use crate::feat::{
     bench::{AllBenchResults, BENCHMARKS, BenchId, Benches},
@@ -9,7 +9,7 @@ use crate::feat::{
 };
 use clap::Parser;
 use error_stack::{Report, ResultExt};
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 use tokio::task::JoinSet;
 
 #[derive(Debug, thiserror::Error)]
@@ -39,6 +39,7 @@ pub struct BenchArgs {
     bench_path: PathBuf,
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<BenchError>> {
     let api_key = {
         if let Ok(key) = std::env::var("OPENROUTER_API_KEY") {
@@ -114,9 +115,16 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
         results_tx: tx.clone(),
     };
 
-    let mut set = JoinSet::new();
+    let mut joinset = JoinSet::new();
 
-    let pb = ProgressBar::new(total_requests as u64);
+    let pb = ProgressBar::new(total_requests as u64).with_style(
+        ProgressStyle::with_template(
+            "{spinner} {msg} {bar:40.cyan/blue} {percent}% ({pos}/{len}) ETA: {eta} / Elapsed: {elapsed}",
+        )
+        .expect("programming error: invalid spinner format string"),
+    );
+    pb.enable_steady_tick(Duration::from_millis(50));
+    pb.set_message("Benching ");
 
     let result_writer = tokio::task::spawn(async move {
         spawn_result_writer(shared_args.results, total_requests, pb, rx).await;
@@ -124,15 +132,15 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
 
     for (model, requests) in requests {
         let config = config.clone();
-        set.spawn(async move {
+        joinset.spawn(async move {
             completion::run(config, model, requests).await;
         });
     }
 
-    tracing::trace!(count = set.len(), "tasks spawned");
+    tracing::trace!(count = joinset.len(), "tasks spawned");
 
-    while (set.join_next().await).is_some() {
-        tracing::trace!(remaining = set.len(), "task finished");
+    while (joinset.join_next().await).is_some() {
+        tracing::trace!(remaining = joinset.len(), "task finished");
     }
 
     if let Err(e) = tx.send(ResultWriterCmd::Quit) {
