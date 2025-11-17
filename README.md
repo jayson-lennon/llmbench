@@ -18,14 +18,14 @@ This is an experimental application created for my own personal use to iterate o
 
 Only source installation is currently supported.
 
-1. Install Rust if not already: [rustup.rs](https://rustup.rs).
+1. Install Rust if not already: [rustup.rs](https://rustup.rs)
 2. Clone the repo and build:
    ```
    git clone <repo-url>
    cd llmbench
    cargo build --release
    ```
-3. Add to `$PATH` or use `cargo run`.
+3. Add to `$PATH` or use `cargo run`
 
 ## Configuration
 
@@ -51,13 +51,13 @@ models = [
 Run all benchmarks on all models (defaults to 3 runs per model per benchmark):
 
 ```
-cargo run -- bench
+cargo run --release -- bench
 ```
 
 Run specific benchmarks and models:
 
 ```
-cargo run -- bench -m "x-ai/grok-4" -m "qwen/qwen3-coder" --n-runs 2 task_priority__naive 
+cargo run --release -- bench -m "x-ai/grok-4" -m "qwen/qwen3-coder" --n-runs 2 task_priority__naive 
 ```
 
 ### Evaluation
@@ -65,13 +65,13 @@ cargo run -- bench -m "x-ai/grok-4" -m "qwen/qwen3-coder" --n-runs 2 task_priori
 Evaluate all results:
 
 ```
-cargo run -- eval
+cargo run --release -- eval
 ```
 
 Evaluate results, filtering by model and bench:
 
 ```
-cargo run -- eval -m "gpt-4o-mini" -b task_priority__naive
+cargo run --release -- eval -m "gpt-4o-mini" -b task_priority__naive
 ```
 
 #### Output
