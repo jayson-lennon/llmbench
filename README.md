@@ -130,6 +130,7 @@ impl_simple_bench!(
     "category/foo",
     r#"Reply with the word "foo" without quotes and without additional comment"#,
     expect_response!("foo")
+);
 ```
 
 If you need to perform additional processing, or have a multi-turn benchmark, then you'll need to use something like this:
