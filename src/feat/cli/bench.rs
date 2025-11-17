@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 use crate::feat::{
     bench::{AllBenchResults, BENCHMARKS, BenchId, Benches},
@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 
 #[derive(Debug, thiserror::Error)]
 #[error("a BenchError occurred")]
-pub struct BenchError;
+pub struct CliBenchError;
 
 /// Run LLM benchmarks
 #[derive(Parser, Debug)]
@@ -33,21 +33,17 @@ pub struct BenchArgs {
     /// Number of runs per bench
     #[arg(long, default_value_t = 3)]
     n_runs: u32,
-
-    /// Path to bench dir
-    #[arg(long, default_value = "bench")]
-    bench_path: PathBuf,
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<BenchError>> {
+pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<[CliBenchError]>> {
     let api_key = {
         if let Ok(key) = std::env::var("OPENROUTER_API_KEY") {
             key
         } else {
             let Some(key) = args.api_key.clone() else {
                 tracing::error!("OPENROUTER_API_KEY env variable or CLI arg required");
-                return Err(Report::from(BenchError));
+                return Err(Report::from(CliBenchError).expand());
             };
             key
         }
@@ -68,7 +64,7 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
             for id in &bench_ids {
                 if !benches.contains(id) {
                     tracing::error!(id=%id, "bench not found");
-                    return Err(Report::from(BenchError));
+                    return Err(Report::from(CliBenchError).expand());
                 }
             }
             benches
@@ -81,7 +77,7 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
     let models = {
         let models = Models::load_from(shared_args.config)
             .await
-            .change_context(BenchError)
+            .change_context(CliBenchError)
             .attach("failed to load model list")?;
         if args.models.is_empty() {
             models
@@ -91,12 +87,12 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
     };
 
     if models.is_empty() {
-        return Err(Report::from(BenchError)).attach("no models selected");
+        return Err(Report::from(CliBenchError).expand()).attach("no models selected");
     }
 
     let existing_results = AllBenchResults::load(&shared_args.results)
         .await
-        .change_context(BenchError)
+        .change_context(CliBenchError)
         .attach("failed to load existing results")?;
 
     let mut requests = PromptPayloadBatch::new(models, &benches, args.n_runs);
@@ -153,21 +149,26 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
     Ok(())
 }
 
-fn get_bench_ids_to_run(args: &BenchArgs) -> Result<Vec<BenchId>, Report<BenchError>> {
-    let bench_ids = args
+fn get_bench_ids_to_run(args: &BenchArgs) -> Result<Vec<BenchId>, Report<[CliBenchError]>> {
+    let mut error: Option<Report<[CliBenchError]>> = None;
+    let (oks, errs): (Vec<_>, Vec<_>) = args
         .benches
         .iter()
         .map(|bench| BenchId::from_str(bench))
-        .collect::<Vec<_>>();
-    let mut errors = false;
-    for id in &bench_ids {
-        if let Err(e) = id {
-            errors = true;
-            tracing::error!(err=?e);
+        .partition(Result::is_ok);
+
+    for entry in errs {
+        let err = entry.unwrap_err();
+        if let Some(error) = error.as_mut() {
+            error.push(err.change_context(CliBenchError));
+        } else {
+            error = Some(err.change_context(CliBenchError).expand());
         }
     }
-    if errors {
-        return Err(Report::from(BenchError)).attach("error parsing bench ids");
+
+    if let Some(error) = error {
+        Err(error)
+    } else {
+        Ok(oks.into_iter().flatten().collect::<Vec<_>>())
     }
-    Ok(bench_ids.into_iter().flatten().collect::<Vec<_>>())
 }

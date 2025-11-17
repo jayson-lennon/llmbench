@@ -1,3 +1,7 @@
+pub mod error_reporting;
+
+pub use error_reporting::init_error_stack;
+
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 

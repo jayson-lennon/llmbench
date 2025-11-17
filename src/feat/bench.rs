@@ -35,6 +35,7 @@ pub(in crate::feat::bench) mod prelude {
     };
 }
 
+use crate::error::{ErrContext, Suggestion};
 use crate::feat::completion::PromptRequest;
 use crate::feat::completion::worker::{CompletionError, RunHash};
 use crate::feat::models::ModelId;
@@ -131,14 +132,23 @@ impl FromStr for BenchId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((category, name)) = s.split_once('/') {
             if category.is_empty() {
-                return Err(Report::from(BenchError)).attach("missing category from bench id");
+                return Err(Report::from(BenchError))
+                    .attach("missing category from bench id")
+                    .attach(ErrContext::new(format!("input '{s}'")))
+                    .attach(Suggestion("bench ID format must be 'category/benchname'"));
             }
             if name.is_empty() {
-                return Err(Report::from(BenchError)).attach("missing name from bench id");
+                return Err(Report::from(BenchError))
+                    .attach("missing name from bench id")
+                    .attach(ErrContext::new(format!("input '{s}'")))
+                    .attach(Suggestion("bench ID format must be 'category/benchname'"));
             }
             Ok(Self(s.to_string()))
         } else {
-            Err(Report::from(BenchError)).attach("invalid id format (must be category/benchname)")
+            Err(Report::from(BenchError))
+                .attach("invalid id format")
+                .attach(ErrContext::new(format!("input '{s}'")))
+                .attach(Suggestion("bench ID format must be 'category/benchname'"))
         }
     }
 }

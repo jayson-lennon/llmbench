@@ -31,10 +31,12 @@ struct Args {
 struct AppError;
 
 #[tokio::main]
+#[tracing::instrument(err)]
 async fn main() -> Result<(), Report<AppError>> {
     dotenv().unwrap();
     let args = Args::parse();
     init::init_tracing(args.shared.verbosity);
+    init::init_error_stack();
 
     match args.command {
         Command::Bench(bench) => feat::cli::bench::run(bench, args.shared)
