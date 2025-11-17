@@ -79,6 +79,7 @@ cargo run --release -- eval -m "gpt-4o-mini" -b task_priority__naive
 #### Output
 
 Running `eval` prints a table like:
+
 ![Evaluation results](readme/eval.png)
 
 Color coding is used for pass/fail: cyan for pass, red for fail.
