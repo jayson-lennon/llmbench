@@ -1,6 +1,10 @@
 # LLM Bench
 
-A simple Rust-based CLI tool for benchmarking Large Language Models via the [OpenRouter](https://openrouter.ai/) API. It sends predefined prompts to various models, evaluates responses against expected outcomes, and reports pass/fail rates along with token usage and costs.
+A simple Rust-based CLI tool for benchmarking Large Language Models via the [OpenRouter](https://openrouter.ai/) API. It sends predefined prompts to various models, evaluates the responses against expected outcomes, and reports pass/fail rates along with token usage and costs.
+
+## Notes
+
+This is an experimental application created for my own personal use to iterate on different prompt styles. It doesn't include many benchmarks (PRs welcome).
 
 ## Features
 
@@ -176,11 +180,13 @@ There are a handful of helper functions provided in the [helper.rs](src/feat/ben
 
 ## TODO
 
+- [ ] Add more benchmarks
 - [ ] Use pass/fail colors for individual turns on multi-turn evaluations (instead of all red if any turn fails)
 - [ ] Sort output
 - [ ] Display more statistics in the summary line like average or median
 - [ ] Save evaluation results instead of re-running the evaluators each time
 - [ ] Less code to create benchmarks and evaluators.
+- [ ] Easy way to add "1 prompt, 1 answer" benchmarks.
 
 ## License
 
