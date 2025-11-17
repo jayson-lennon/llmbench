@@ -1,6 +1,6 @@
 # LLM Bench
 
-A simple Rust-based CLI tool for benchmarking Large Language Models via the [OpenRouter](https://openrouter.ai/) API. It sends predefined prompts to various models, evaluates the responses against expected outcomes, and reports pass/fail rates along with token usage and costs.
+A simple CLI tool for benchmarking Large Language Models via the [OpenRouter](https://openrouter.ai/) API. It sends predefined prompts to various models, evaluates the responses against expected outcomes, and reports pass/fail rates along with token usage and costs.
 
 ## Notes
 
