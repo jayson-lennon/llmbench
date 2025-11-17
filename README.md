@@ -190,6 +190,7 @@ There are a handful of helper functions provided in the [helper.rs](src/feat/ben
 - [ ] Save evaluation results instead of re-running the evaluators each time
 - [ ] Less code to create benchmarks and evaluators.
 - [ ] Easy way to add "1 prompt, 1 answer" benchmarks.
+- [ ] Different storage backends
 
 ## License
 
