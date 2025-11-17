@@ -1,11 +1,14 @@
 use std::{str::FromStr, time::Duration};
 
-use crate::feat::{
-    bench::{AllBenchResults, BENCHMARKS, BenchId, Benches},
-    cli::SharedArgs,
-    completion::{self, PromptPayloadBatch, RunConfig},
-    models::Models,
-    persistence::{ResultWriterCmd, spawn_result_writer},
+use crate::{
+    error::{ErrContext, Suggestion},
+    feat::{
+        bench::{AllBenchResults, BENCHMARKS, BenchId, Benches},
+        cli::SharedArgs,
+        completion::{self, PromptPayloadBatch, RunConfig},
+        models::Models,
+        persistence::{ResultWriterCmd, spawn_result_writer},
+    },
 };
 use clap::Parser;
 use error_stack::{Report, ResultExt};
@@ -64,7 +67,9 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
             for id in &bench_ids {
                 if !benches.contains(id) {
                     tracing::error!(id=%id, "bench not found");
-                    return Err(Report::from(CliBenchError).expand());
+                    return Err(Report::from(CliBenchError).expand())
+                        .attach(ErrContext::new(format!("bench name='{id}'")))
+                        .attach(Suggestion("make sure the bench exists"));
                 }
             }
             benches
