@@ -89,6 +89,10 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
         }
     };
 
+    if models.is_empty() {
+        return Err(Report::from(BenchError)).attach("no models selected");
+    }
+
     let existing_results = AllBenchResults::load(&shared_args.results)
         .await
         .change_context(BenchError)

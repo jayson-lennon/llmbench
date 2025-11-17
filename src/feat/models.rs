@@ -84,4 +84,8 @@ impl Models {
                 )
             })
     }
+
+    pub const fn is_empty(&self) -> bool {
+        self.models.is_empty()
+    }
 }
