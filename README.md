@@ -10,7 +10,7 @@ This is an experimental application created for my own personal use to iterate o
 
 - Run benchmarks on multiple models and tasks concurrently.
 - Filter and select specific benchmarks or models.
-- Avoid re-running completed tasks.
+- Doesn't re-run completed tasks.
 - Evaluate responses with pluggable evaluators.
 - Output scores filtered by bench or model.
 
