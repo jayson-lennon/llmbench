@@ -45,8 +45,11 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
             key
         } else {
             let Some(key) = args.api_key.clone() else {
-                tracing::error!("OPENROUTER_API_KEY env variable or CLI arg required");
-                return Err(Report::from(CliBenchError).expand());
+                return Err(Report::from(CliBenchError).expand())
+                    .attach("missing API key")
+                    .attach(Suggestion(
+                        "create a .env file with an OPENROUTER_API_KEY variable",
+                    ));
             };
             key
         }
@@ -66,8 +69,8 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
             // bail if we cant find a bench that the user provided
             for id in &bench_ids {
                 if !benches.contains(id) {
-                    tracing::error!(id=%id, "bench not found");
                     return Err(Report::from(CliBenchError).expand())
+                        .attach("unable to find bench")
                         .attach(ErrContext::new(format!("bench name='{id}'")))
                         .attach(Suggestion("make sure the bench exists"));
                 }

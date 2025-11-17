@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 use dotenvy::dotenv;
 use error_stack::{Report, ResultExt};
@@ -33,10 +35,23 @@ struct AppError;
 #[tokio::main]
 #[tracing::instrument(err)]
 async fn main() -> Result<(), Report<AppError>> {
-    dotenv().unwrap();
+    init::init_error_stack();
+
+    dotenv()
+        .or_else(|e| match e {
+            dotenvy::Error::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+                Ok(PathBuf::from(".env"))
+            }
+            _ => Err(e),
+        })
+        .map_err(|e| {
+            Report::from(e)
+                .change_context(AppError)
+                .attach("failed to load .env file")
+        })?;
+
     let args = Args::parse();
     init::init_tracing(args.shared.verbosity);
-    init::init_error_stack();
 
     match args.command {
         Command::Bench(bench) => feat::cli::bench::run(bench, args.shared)
