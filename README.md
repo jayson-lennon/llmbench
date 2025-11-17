@@ -20,11 +20,13 @@ Only source installation is currently supported.
 
 1. Install Rust if not already: [rustup.rs](https://rustup.rs)
 2. Clone the repo and build:
+
    ```
    git clone <repo-url>
    cd llmbench
    cargo build --release
    ```
+
 3. Add to `$PATH` or use `cargo run`
 
 ## Configuration
