@@ -128,7 +128,7 @@ pub async fn run(args: BenchArgs, shared_args: SharedArgs) -> Result<(), Report<
     tracing::trace!(count = set.len(), "tasks spawned");
 
     while (set.join_next().await).is_some() {
-        tracing::info!(remaining = set.len(), "task finished");
+        tracing::trace!(remaining = set.len(), "task finished");
     }
 
     if let Err(e) = tx.send(ResultWriterCmd::Quit) {

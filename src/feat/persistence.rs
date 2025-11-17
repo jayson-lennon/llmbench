@@ -35,7 +35,7 @@ pub async fn spawn_result_writer<P>(
             ResultWriterCmd::SaveResult(result) => {
                 completed += 1;
                 pb.inc(1);
-                tracing::info!(
+                tracing::trace!(
                     remaining = (total_requests.saturating_sub(completed)),
                     total = total_requests,
                     "received result"
@@ -43,7 +43,7 @@ pub async fn spawn_result_writer<P>(
                 if let Err(e) = write_to_ndjson(path.clone(), &result).await {
                     tracing::error!(err=?e, "failed to save results");
                 } else {
-                    tracing::debug!(bench=%result.bench, model=%result.model, "wrote result");
+                    tracing::trace!(bench=%result.bench, model=%result.model, "wrote result");
                 }
             }
             ResultWriterCmd::JobError => {

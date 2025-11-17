@@ -127,7 +127,7 @@ impl PromptPayloadBatch {
         }
         let diff = initial_result_len - self.payloads.len();
         total_filtered += diff;
-        tracing::info!(
+        tracing::trace!(
             requests = initial_result_len,
             filtered = total_filtered,
             pending = self.payloads.len(),

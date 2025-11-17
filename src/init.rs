@@ -6,7 +6,7 @@ pub fn init_tracing() {
 
     let filter = match env::var("RUST_LOG") {
         Ok(filter_str) => filter_str,
-        Err(_) => "llmbench=trace".to_string(),
+        Err(_) => "llmbench=info".to_string(),
     };
 
     tracing_subscriber::registry()

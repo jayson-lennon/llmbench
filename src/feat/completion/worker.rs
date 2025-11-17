@@ -97,7 +97,7 @@ pub async fn complete(
     model: &ModelId,
     bench: &BenchId,
 ) -> Result<Response, Report<CompletionError>> {
-    tracing::info!(model=%model, bench=%bench, "sending completion request");
+    tracing::trace!(model=%model, bench=%bench, "sending completion request");
 
     // Add 1 minute timeout
     let timeout_duration = std::time::Duration::from_secs(60);
@@ -109,7 +109,7 @@ pub async fn complete(
     .await
     {
         Ok(Ok(response)) => {
-            tracing::debug!(model=%model, bench=%bench, "got response");
+            tracing::trace!(model=%model, bench=%bench, "got response");
             Ok(response)
         }
         Ok(Err(e)) => {
