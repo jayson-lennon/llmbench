@@ -36,6 +36,94 @@ macro_rules! register_eval {
 }
 pub(crate) use register_eval;
 
+/// Macro to generate a simple response matcher closure.
+/// Processes: lowercase, remove chat tags, alphanumeric + whitespace only, trim.
+/// Checks exact equality to $expected.
+macro_rules! expect_response {
+    ($expected:literal) => {
+        |responses: &[Choice]| -> Score {
+            use crate::feat::bench::prelude::*;
+            match responses {
+                [a] => match a.get_message() {
+                    Some(a) => {
+                        let processed = a
+                            .lowercase()
+                            .remove_chat_tags()
+                            .alphanumeric_only()
+                            .trim()
+                            .to_string();
+                        let answer = processed == $expected;
+                        Score::builder().pass(answer).build()
+                    }
+                    _ => Score::fail(),
+                },
+                _ => Score::fail(),
+            }
+        }
+    };
+}
+
+pub(crate) use expect_response;
+
+/// Register a simple 1-prompt benchmark with auto-generated run and eval.
+/// Usage: register_simple_bench!($id:literal, $prompt:literal, $matcher:expr);
+/// Where $matcher is typically an invocation of `expect_response!($expected:literal)`.
+macro_rules! impl_simple_bench {
+    ($id:literal, $prompt:literal, $matcher:expr) => {
+        const ID: &str = $id;
+        const PROMPT: &str = $prompt;
+
+        mod bench {
+            use super::ID;
+            use super::PROMPT;
+            use crate::feat::bench::helper::register_bench;
+            use crate::feat::bench::prelude::*;
+
+            register_bench!(run);
+
+            async fn run(
+                api: Arc<OpenRouter>,
+                ctx: BenchCtx,
+            ) -> Result<BenchResult, Report<CompletionError>> {
+                let bench = BenchId(ID.to_string());
+                let mut result = BenchResult {
+                    hash: ctx.run_hash,
+                    bench: bench.clone(),
+                    model: ctx.model.clone(),
+                    requests: vec![],
+                    responses: vec![],
+                };
+
+                let request = PromptRequest::builder()
+                    .model(ctx.model.to_string())
+                    .messages(vec![user_message(PROMPT)])
+                    .build()
+                    .save_to(&mut result);
+
+                let _ = complete(&api, request.clone(), &ctx.model, &bench)
+                    .await?
+                    .save_to(&mut result);
+
+                Ok(result)
+            }
+        }
+
+        mod eval {
+            use super::ID;
+            use crate::feat::bench::helper::register_eval;
+            use crate::feat::bench::prelude::*;
+
+            register_eval!(eval);
+
+            fn eval(responses: &[Choice]) -> Score {
+                ($matcher)(responses)
+            }
+        }
+    };
+}
+
+pub(crate) use impl_simple_bench;
+
 /// Create a new user message.
 pub(in crate::feat::bench) fn user_message<M>(msg: M) -> Message
 where

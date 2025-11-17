@@ -23,8 +23,8 @@ pub(in crate::feat::bench) mod prelude {
             BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, BenchResultRequestExt,
             BenchResultResponseExt,
             helper::{
-                ResponseExt, StringBenchExt, assistant_message, register_bench, register_eval,
-                user_message,
+                ResponseExt, StringBenchExt, assistant_message, expect_response, impl_simple_bench,
+                register_bench, register_eval, user_message,
             },
         },
         completion::{
