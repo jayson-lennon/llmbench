@@ -7,6 +7,7 @@ edition = "2024"
 ansi-width = "0.1.0"
 bon = "3.8.1"
 clap = { version = "4.5.51", features = ["derive", "env"] }
+clap-verbosity-flag = { version = "3.0.4", default-features = false, features = ["tracing"] }
 derive_more = { version = "2.0.1", features = ["full"] }
 dotenvy = { version = "0.15.7", features = ["clap", "cli"] }
 error-stack = { version = "0.6.0", features = ["hooks", "spantrace"] }

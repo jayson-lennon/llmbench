@@ -1,12 +1,13 @@
+use clap_verbosity_flag::{Verbosity, WarnLevel};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
-pub fn init_tracing() {
+pub fn init_tracing(verbosity: Verbosity<WarnLevel>) {
     use std::env;
     use tracing_subscriber::EnvFilter;
 
     let filter = match env::var("RUST_LOG") {
         Ok(filter_str) => filter_str,
-        Err(_) => "llmbench=info".to_string(),
+        Err(_) => format!("llmbench={verbosity}"),
     };
 
     tracing_subscriber::registry()

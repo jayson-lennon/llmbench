@@ -32,9 +32,9 @@ struct AppError;
 
 #[tokio::main]
 async fn main() -> Result<(), Report<AppError>> {
-    init::init_tracing();
     dotenv().unwrap();
     let args = Args::parse();
+    init::init_tracing(args.shared.verbosity);
 
     match args.command {
         Command::Bench(bench) => feat::cli::bench::run(bench, args.shared)
