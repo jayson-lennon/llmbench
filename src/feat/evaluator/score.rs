@@ -94,6 +94,10 @@ impl Scores {
     ) -> std::collections::hash_map::IterMut<'_, BenchModelKey, Vec<ScoredBench>> {
         self.scores.iter_mut()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.scores.is_empty()
+    }
 }
 
 impl IntoIterator for Scores {

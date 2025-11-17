@@ -73,6 +73,11 @@ impl ScoreFormatter {
 
     #[allow(clippy::too_many_lines)]
     pub fn print(&self, sort_column: SortColumn) {
+        if self.scores.is_empty() {
+            println!("no scores matching the filter criteria");
+            return;
+        }
+
         let div = " | ".fg::<Gray>().to_string();
         self.print_header(&div);
 
