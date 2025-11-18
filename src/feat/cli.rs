@@ -36,7 +36,9 @@ async fn select_models(
     models: &[ModelId],
     groups: &[String],
     shared_args: &SharedArgs,
-) -> Result<SelectedModels, Report<CliError>> {
+) -> Result<SelectedModels, Report<[CliError]>> {
+    let mut error: Option<Report<[CliError]>> = None;
+
     let models = match (models.is_empty(), groups.is_empty()) {
         (true, true) => {
             // Both empty: select all
@@ -58,10 +60,18 @@ async fn select_models(
                     .iter_groups()
                     .any(|(available, _)| available == group)
                 {
-                    return Err(Report::from(CliError))
+                    let err = Report::from(CliError)
                         .attach("group not found")
-                        .attach_with(|| ErrContext(format!("group name = {group}")));
+                        .attach(ErrContext(format!("group name = {group}")));
+                    if let Some(error) = error.as_mut() {
+                        error.push(err);
+                    } else {
+                        error = Some(err.expand());
+                    }
                 }
+            }
+            if let Some(error) = error {
+                return Err(error);
             }
             all_models
                 .iter_groups()

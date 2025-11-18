@@ -41,7 +41,7 @@ pub struct EvalArgs {
     sort: SortColumn,
 }
 
-pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<CliError>> {
+pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[CliError]>> {
     let responses = AllBenchResults::load(&shared_args.results)
         .await
         .change_context(CliError)
