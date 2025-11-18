@@ -1,13 +1,13 @@
 use crate::feat::{
-    bench::AllBenchResults, cli::SharedArgs, evaluator::Evaluators, score_formatter::ScoreFormatter,
+    bench::AllBenchResults,
+    cli::{CliError, SharedArgs, select_models},
+    evaluator::Evaluators,
+    model::ModelId,
+    score_formatter::ScoreFormatter,
 };
 use clap::{Parser, ValueEnum};
 use derive_more::Display;
 use error_stack::{Report, ResultExt};
-
-#[derive(Debug, thiserror::Error)]
-#[error("an EvalError occurred")]
-pub struct EvalError;
 
 /// Sort column
 #[derive(Copy, Debug, Default, Clone, ValueEnum, Display)]
@@ -29,18 +29,22 @@ pub struct EvalArgs {
     benches: Vec<String>,
 
     /// Show results for the specified models.
-    #[arg(short, long)]
-    models: Vec<String>,
+    #[arg(short, long, group = "pickmodels")]
+    models: Vec<ModelId>,
+
+    /// Show results from a specified group defined in config.toml
+    #[arg(short = 'g', long, group = "pickmodels")]
+    model_groups: Vec<String>,
 
     /// Sort column
     #[arg(short, long, default_value_t = SortColumn::Bench)]
     sort: SortColumn,
 }
 
-pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<EvalError>> {
+pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<CliError>> {
     let responses = AllBenchResults::load(&shared_args.results)
         .await
-        .change_context(EvalError)
+        .change_context(CliError)
         .attach("failed to load existing responses")?;
 
     let evaluators = Evaluators::default();
@@ -49,11 +53,7 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<E
 
     let mut scores = evaluators.score(responses);
 
-    let model_filter = args
-        .models
-        .iter()
-        .map(|model| model.to_lowercase())
-        .collect::<Vec<_>>();
+    let model_filter = select_models(&args.models, &args.model_groups, &shared_args).await?;
 
     if !model_filter.is_empty() {
         scores = scores
@@ -61,7 +61,7 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<E
             .filter(|(key, _)| {
                 model_filter
                     .iter()
-                    .any(|filter| key.model_id.0.contains(filter))
+                    .any(|filter| key.model_id.contains(filter))
             })
             .collect();
     }

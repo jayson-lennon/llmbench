@@ -13,7 +13,7 @@ use crate::feat::bench::BenchId;
 use crate::feat::completion::PromptRequest;
 use crate::feat::{
     bench::{Bench, BenchCtx},
-    models::ModelId,
+    model::ModelId,
     persistence::{ResultSender, ResultWriterCmd},
 };
 

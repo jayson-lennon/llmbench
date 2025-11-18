@@ -1,7 +1,7 @@
 use crate::feat::bench::prelude::*;
 
 impl_simple_bench!(
-    "decision_making/naive",
+    "decision_making/task_priority__naive",
     r#"
 Given the following tasks for a video game development project for a city simulator, what should be worked on next?
 

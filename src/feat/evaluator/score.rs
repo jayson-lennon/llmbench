@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     feat::bench::{BenchId, BenchResult},
-    feat::models::ModelId,
+    feat::model::ModelId,
 };
 
 pub trait GetMessageExt {

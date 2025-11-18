@@ -100,3 +100,6 @@ models = [
     # "z-ai/glm-4.5v",
     # "z-ai/glm-4.6",
 ]
+
+[model_groups]
+8b = ["mistralai/ministral-8b", "qwen/qwen3-vl-8b-thinking"]

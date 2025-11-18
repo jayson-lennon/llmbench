@@ -38,7 +38,7 @@ pub(in crate::feat::bench) mod prelude {
 use crate::error::{ErrContext, Suggestion};
 use crate::feat::completion::PromptRequest;
 use crate::feat::completion::worker::{CompletionError, RunHash};
-use crate::feat::models::ModelId;
+use crate::feat::model::ModelId;
 use derive_more::Debug;
 use derive_more::Display;
 use error_stack::{Report, ResultExt};
@@ -134,7 +134,7 @@ impl FromStr for BenchId {
             if category.is_empty() {
                 return Err(Report::from(BenchError))
                     .attach("missing category from bench id")
-                    .attach(ErrContext::new(format!("input '{s}'")))
+                    .attach_with(|| ErrContext::new(format!("input '{s}'")))
                     .attach(Suggestion("bench ID format must be 'category/benchname'"));
             }
             if name.is_empty() {
@@ -147,7 +147,7 @@ impl FromStr for BenchId {
         } else {
             Err(Report::from(BenchError))
                 .attach("invalid id format")
-                .attach(ErrContext::new(format!("input '{s}'")))
+                .attach_with(|| ErrContext::new(format!("input '{s}'")))
                 .attach(Suggestion("bench ID format must be 'category/benchname'"))
         }
     }

@@ -15,7 +15,7 @@ use twox_hash::XxHash3_64;
 use crate::feat::{
     bench::{AllBenchResults, BenchCtx, Benches},
     completion::{RunPayload, worker::RunHash},
-    models::{ModelId, Models},
+    model::ModelId,
 };
 
 const SEED: u64 = 1337;
@@ -135,7 +135,10 @@ impl PromptPayloadBatch {
         );
     }
 
-    pub fn new(models: Models, benches: &Benches, n_runs: u32) -> PromptPayloadBatch {
+    pub fn new<M>(models: M, benches: &Benches, n_runs: u32) -> PromptPayloadBatch
+    where
+        M: IntoIterator<Item = ModelId>,
+    {
         let mut payloads = Vec::new();
         for model in models {
             for bench in benches {
@@ -143,7 +146,7 @@ impl PromptPayloadBatch {
                     payloads.push(RunPayload {
                         ctx: BenchCtx {
                             run_number: run,
-                            model: ModelId(model.clone()),
+                            model: model.clone(),
                             run_hash: RunHash(0),
                         },
                         bench: bench.clone(),
