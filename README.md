@@ -13,6 +13,7 @@ This is an experimental application created for my own personal use to iterate o
 - Doesn't re-run completed tasks.
 - Evaluate responses with pluggable evaluators.
 - Output scores filtered by bench or model.
+- Group models into categories
 
 ## Installation
 
