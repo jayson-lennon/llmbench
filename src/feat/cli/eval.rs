@@ -32,7 +32,7 @@ pub struct EvalArgs {
     #[arg(short, long, group = "pickmodels")]
     models: Vec<ModelId>,
 
-    /// Show results from a specified group defined in config.toml
+    /// Show results from groups defined in config.toml
     #[arg(short = 'g', long, group = "pickmodels")]
     model_groups: Vec<String>,
 

@@ -21,11 +21,11 @@ pub struct BenchArgs {
     /// The benches to run. Runs all benches by default.
     benches: Vec<String>,
 
-    /// Specify which models to bench. Runs on all models by default.
+    /// Bench specific models. Runs on all models by default.
     #[arg(short, long, group = "pickmodels")]
     models: Vec<ModelId>,
 
-    /// Specify a group of models to bench from a group in config.toml
+    /// Bench groups of models from groups defined config.toml
     #[arg(short = 'g', long, group = "pickmodels")]
     model_groups: Vec<String>,
 
