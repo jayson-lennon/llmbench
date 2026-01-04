@@ -5,6 +5,7 @@ pub mod helper;
 * ******************** */
 
 pub mod decision_making;
+pub mod summary;
 
 /* *********************
 * end bench modules
