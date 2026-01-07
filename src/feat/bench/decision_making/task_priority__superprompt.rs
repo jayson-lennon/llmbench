@@ -7,8 +7,6 @@ You are an expert game developer and project manager. Your job is to determine t
 
 There is only 1 developer working on the game, so the task should provide the most value in driving the project forward. The most important task in a game development project is one that is blocking other incomplete tasks.
 
-Think about your answer step by step before responding.
-
 ## Building Graphics
 - [x] Residential zone
 - [ ] Commercial zone
