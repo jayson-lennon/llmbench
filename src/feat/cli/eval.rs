@@ -22,6 +22,24 @@ pub enum SortColumn {
     /// Sort by model
     #[display("model")]
     Model,
+    /// Sort by agent
+    #[display("agent")]
+    Agent,
+    /// Sort by input tokens
+    #[display("in")]
+    In,
+    /// Sort by output tokens
+    #[display("out")]
+    Out,
+    /// Sort by reasoning tokens
+    #[display("reason")]
+    Reason,
+    /// Sort by cost per run
+    #[display("cost")]
+    Cost,
+    /// Sort by percent cost delta
+    #[display("cost-delta")]
+    CostDelta,
 }
 
 /// Evaluate LLM responses
@@ -110,14 +128,15 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
 
     // Filter by model
     let mut scores = scores;
+    let has_model_filter = !args.models.is_empty() || !args.model_groups.is_empty();
     let model_filter = select_models(&args.models, &args.model_groups, &shared_args).await?;
-    if !model_filter.is_empty() {
+    if has_model_filter {
         scores = scores
             .into_iter()
             .filter(|(key, _)| {
                 model_filter
                     .iter()
-                    .any(|filter| key.model_id.contains(filter))
+                    .any(|filter| key.model_id.as_str() == filter.as_str())
             })
             .collect();
     }

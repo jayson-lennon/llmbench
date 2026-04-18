@@ -6,6 +6,8 @@ use crate::{
     feat::model::ModelId,
 };
 
+use super::display::pct_cost_diff;
+
 #[derive(Clone, Default, Debug)]
 #[allow(clippy::struct_field_names)]
 pub(super) struct EntryAgg {
@@ -88,6 +90,50 @@ impl AggregatedScores {
         let entry = self.entries.get(&key)?;
         (entry.runs > 0).then_some(entry.cost_per_run())
     }
+
+    /// Compute per-agent aggregation groups.
+    /// Returns one `AgentGroup` per distinct agent suffix, sorted
+    /// `(baseline)` first, then alphabetical.
+    pub(super) fn per_agent_totals(&self) -> Vec<AgentGroup> {
+        let mut groups: HashMap<Option<String>, AgentGroup> = HashMap::new();
+
+        for (key, entry) in self.entries.iter() {
+            let (_base, agent_suffix) = split_agent_suffix(&key.bench_id.0);
+            let label_key = agent_suffix.map(String::from);
+            let group = groups.entry(label_key).or_insert_with(|| AgentGroup {
+                label: agent_suffix
+                    .map(String::from)
+                ,
+                totals: Totals::default(),
+                cost_diffs: Vec::new(),
+            });
+
+            group.totals.passed += entry.passed;
+            group.totals.runs += entry.runs;
+            group.totals.prompt_tokens += entry.prompt_tokens;
+            group.totals.completion_tokens += entry.completion_tokens;
+            group.totals.reasoning_tokens += entry.reasoning_tokens;
+            group.totals.cost += entry.cost;
+
+            // Collect cost diffs for agent entries (not baseline)
+            if agent_suffix.is_some() {
+                if let Some(base_cpp) = self.baseline_cost_per_run(_base, &key.model_id.0) {
+                    let pct = pct_cost_diff(entry.cost_per_run(), base_cpp);
+                    group.cost_diffs.push(pct);
+                }
+            }
+        }
+
+        let mut result: Vec<AgentGroup> = groups.into_values().collect();
+        result.sort_by(|a, b| {
+            match (&a.label, &b.label) {
+                (None, _) => std::cmp::Ordering::Less,
+                (_, None) => std::cmp::Ordering::Greater,
+                (Some(la), Some(lb)) => la.cmp(lb),
+            }
+        });
+        result
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -104,5 +150,45 @@ impl Totals {
     #[allow(clippy::cast_precision_loss)]
     pub(super) fn pct_pass(&self) -> f64 {
         self.passed as f64 / self.runs as f64
+    }
+}
+
+/// Per-agent aggregation group.
+#[derive(Debug, Clone)]
+pub(super) struct AgentGroup {
+    /// `None` means baseline (no agent).
+    pub(super) label: Option<String>,
+    pub(super) totals: Totals,
+    pub(super) cost_diffs: Vec<f64>,
+}
+
+impl AgentGroup {
+    /// Display label: `"(baseline)"` for `None`, otherwise the agent name.
+    pub(super) fn display_label(&self) -> &str {
+        self.label.as_deref().unwrap_or("(baseline)")
+    }
+
+    /// Compute median of collected cost diffs, or `None` if empty.
+    pub(super) fn median_cost_diff(&mut self) -> Option<f64> {
+        if self.cost_diffs.is_empty() {
+            return None;
+        }
+        self.cost_diffs
+            .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mid = self.cost_diffs.len() / 2;
+        Some(if self.cost_diffs.len().is_multiple_of(2) {
+            f64::midpoint(self.cost_diffs[mid - 1], self.cost_diffs[mid])
+        } else {
+            self.cost_diffs[mid]
+        })
+    }
+}
+
+/// Split `category/name+agent` into (`category/name`, Some(`agent`)).
+/// If no `+`, returns (`id`, None).
+pub(super) fn split_agent_suffix(id: &str) -> (&str, Option<&str>) {
+    match id.rsplit_once('+') {
+        Some((base, agent)) => (base, Some(agent)),
+        None => (id, None),
     }
 }

@@ -8,9 +8,9 @@ use super::NCOLS;
 /// Holds the computed widths for each column.
 #[derive(Debug, Clone)]
 pub(super) struct ColWidths {
-    pub(super) bench: usize,
-    pub(super) agent: usize,
     pub(super) model: usize,
+    pub(super) bench: usize,
+    pub(super) agents_md: usize,
     pub(super) result: usize,
     pub(super) passed: usize,
     pub(super) in_tokens: usize,
@@ -23,9 +23,9 @@ pub(super) struct ColWidths {
 impl ColWidths {
     pub(super) fn as_array(&self) -> [usize; NCOLS] {
         [
-            self.bench,
-            self.agent,
             self.model,
+            self.bench,
+            self.agents_md,
             self.result,
             self.passed,
             self.in_tokens,
@@ -58,9 +58,9 @@ impl Row {
     pub(super) fn header(w: &ColWidths) -> Self {
         Self::new(
             [
-                "bench".into(),
-                "agent".into(),
                 "model".into(),
+                "bench".into(),
+                "AGENTS.md".into(),
                 "result".into(),
                 "passed".into(),
                 "in".into(),
@@ -74,19 +74,20 @@ impl Row {
     }
 
     /// Summary header — only show labels for aggregated columns.
+    /// First three columns (model, bench) are blank; AGENTS.md carries the label.
     pub(super) fn summary_header(w: &ColWidths) -> Self {
         Self::new(
             [
                 String::new().into(),
                 String::new().into(),
-                String::new().into(),
+                "AGENTS.md".into(),
                 "% pass".into(),
                 "passed".into(),
                 "in".into(),
                 "out".into(),
                 String::new().into(),
                 "total cost ($USD)".into(),
-                String::new().into(),
+                "% cost Δ med".into(),
             ],
             w,
         )

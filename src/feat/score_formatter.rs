@@ -6,6 +6,7 @@ use crate::{
     feat::evaluator::score::Scores,
 };
 
+mod agent_summary;
 mod aggregate;
 mod display;
 mod row;
@@ -14,7 +15,9 @@ const MARK_PASS: &str = "✅ Pass";
 const MARK_FAIL: &str = "❌ Fail";
 const NCOLS: usize = 10;
 
-use aggregate::{AggregatedScores, Totals};
+use aggregate::{AggregatedScores, Totals, split_agent_suffix};
+use crate::feat::evaluator::score::BenchModelKey;
+use agent_summary::AgentSummary;
 use display::{
     format_pass_fail, format_passed, format_pct_cost_diff,
     format_totals_passed, pct_cost_diff, print_response_details,
@@ -33,22 +36,31 @@ impl ScoreFormatter {
         let agg = AggregatedScores::build(&scores);
 
         let mut bench_width = 4; // "bench"
-        let mut agent_width = 5; // "agent"
+        let mut agents_md_width = "AGENTS.md".len(); // 9
         let mut model_width = 1;
         let mut in_tokens_width = 2;  // "in"
         let mut out_tokens_width = 3; // "out"
         let mut reason_width = 6;     // "reason"
-        let mut cost_diff_width = "% cost Δ".len();
+        let mut cost_diff_width = "% cost Δ med".len();
+
+        let mut totals = Totals::default();
 
         for (key, _) in &scores {
             let (base, agent) = split_agent_suffix(&key.bench_id.0);
             bench_width = bench_width.max(base.len());
             if let Some(agent) = agent {
-                agent_width = agent_width.max(agent.len());
+                agents_md_width = agents_md_width.max(agent.len());
             }
             model_width = model_width.max(key.model_id.len());
 
             let entry = agg.for_key(key);
+            totals.prompt_tokens += entry.prompt_tokens;
+            totals.completion_tokens += entry.completion_tokens;
+            totals.reasoning_tokens += entry.reasoning_tokens;
+            totals.cost += entry.cost;
+            totals.runs += entry.runs;
+            totals.passed += entry.passed;
+
             in_tokens_width = in_tokens_width.max(digits(entry.prompt_tokens));
             out_tokens_width = out_tokens_width.max(digits(entry.completion_tokens));
             reason_width = reason_width.max(
@@ -65,10 +77,22 @@ impl ScoreFormatter {
             }
         }
 
+        // Account for totals in column widths
+        in_tokens_width = in_tokens_width.max(digits(totals.prompt_tokens));
+        out_tokens_width = out_tokens_width.max(digits(totals.completion_tokens));
+        reason_width = reason_width.max(
+            if totals.reasoning_tokens > 0 { digits(totals.reasoning_tokens) } else { 1 }
+        );
+
+        // Account for aggregate labels in AGENTS.md column
+        agents_md_width = agents_md_width
+            .max("(baseline)".len())
+            .max("Grand totals".len());
+
         let widths = ColWidths {
-            bench: bench_width,
-            agent: agent_width,
             model: model_width,
+            bench: bench_width,
+            agents_md: agents_md_width,
             result: ansi_width(MARK_PASS),
             passed: "passed".len() + 3,
             in_tokens: in_tokens_width,
@@ -97,12 +121,35 @@ impl ScoreFormatter {
 
         // Sort entries by the requested column
         let mut entries: Vec<_> = self.scores.iter().collect();
-        entries.sort_by(|(a, _), (b, _)| match sort_column {
-            SortColumn::Bench => a.bench_id.cmp(&b.bench_id),
-            SortColumn::Model => a.model_id.cmp(&b.model_id),
+        entries.sort_by(|(a_key, _), (b_key, _)| {
+            let a_entry = self.agg.for_key(a_key);
+            let b_entry = self.agg.for_key(b_key);
+            match sort_column {
+                SortColumn::Bench => a_key.bench_id.cmp(&b_key.bench_id),
+                SortColumn::Model => a_key.model_id.cmp(&b_key.model_id),
+                SortColumn::Agent => {
+                    let (_, agent_a) = split_agent_suffix(&a_key.bench_id.0);
+                    let (_, agent_b) = split_agent_suffix(&b_key.bench_id.0);
+                    agent_a.cmp(&agent_b).then_with(|| a_key.bench_id.cmp(&b_key.bench_id))
+                }
+                SortColumn::In => a_entry.prompt_tokens.cmp(&b_entry.prompt_tokens),
+                SortColumn::Out => a_entry.completion_tokens.cmp(&b_entry.completion_tokens),
+                SortColumn::Reason => a_entry.reasoning_tokens.cmp(&b_entry.reasoning_tokens),
+                SortColumn::Cost => {
+                    a_entry.cost_per_run()
+                        .partial_cmp(&b_entry.cost_per_run())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }
+                SortColumn::CostDelta => {
+                    let a_pct = self.cost_diff_pct(a_key);
+                    let b_pct = self.cost_diff_pct(b_key);
+                    a_pct.partial_cmp(&b_pct).unwrap_or(std::cmp::Ordering::Equal)
+                }
+            }
         });
 
         let mut totals = Totals::default();
+        let mut cost_diffs: Vec<f64> = Vec::new();
 
         for (key, scores) in &entries {
             let entry = self.agg.for_key(key);
@@ -138,10 +185,9 @@ impl ScoreFormatter {
                     .map_or_else(
                         || "-".to_string(),
                         |base_cpp| {
-                            format_pct_cost_diff(pct_cost_diff(
-                                entry.cost_per_run(),
-                                base_cpp,
-                            ))
+                            let pct = pct_cost_diff(entry.cost_per_run(), base_cpp);
+                            cost_diffs.push(pct);
+                            format_pct_cost_diff(pct)
                         },
                     )
             } else {
@@ -150,9 +196,9 @@ impl ScoreFormatter {
 
             let row = Row::new(
                 [
+                    key.model_id.to_string().into(),
                     base_bench.to_string().into(),
                     agent_suffix.unwrap_or("").to_string().into(),
-                    key.model_id.to_string().into(),
                     result_str.into(),
                     passed_str.into(),
                     n_in.to_string().into(),
@@ -171,12 +217,18 @@ impl ScoreFormatter {
             }
         }
 
-        // ── Summary ─────────────────────────────────────────────────────
+        // ── Per-agent summary ────────────────────────────────────────────
 
         let divider_line = format!(
             " {}",
             row::pad_str("", table_width - 2, '=').into_owned()
         );
+        println!("{}", divider_line.fg::<Gray>());
+
+        AgentSummary::build(&self.agg).print(&self.widths);
+
+        // ── Grand totals ────────────────────────────────────────────────
+
         println!("{}", divider_line.fg::<Gray>());
 
         println!("{}", Row::summary_header(&self.widths).render());
@@ -191,18 +243,31 @@ impl ScoreFormatter {
             "-".to_string()
         };
 
+        let median_str = if cost_diffs.is_empty() {
+            "-".to_string()
+        } else {
+            cost_diffs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let mid = cost_diffs.len() / 2;
+            let median = if cost_diffs.len().is_multiple_of(2) {
+                f64::midpoint(cost_diffs[mid - 1], cost_diffs[mid])
+            } else {
+                cost_diffs[mid]
+            };
+            format_pct_cost_diff(median)
+        };
+
         let summary = Row::new(
             [
                 String::new().into(),
                 String::new().into(),
-                String::new().into(),
+                "Grand totals".into(),
                 pct_pass.into(),
                 passed_str.into(),
                 totals.prompt_tokens.to_string().into(),
                 totals.completion_tokens.to_string().into(),
                 nreason_str.into(),
                 cost_str.into(),
-                "-".into(),
+                median_str.into(),
             ],
             &self.widths,
         );
@@ -217,11 +282,17 @@ fn digits(n: u32) -> usize {
     n.checked_ilog10().map_or(1, |d| d as usize + 1)
 }
 
-/// Split `category/name+agent` into (`category/name`, Some(`agent`)).
-/// If no `+`, returns (`id`, None).
-fn split_agent_suffix(id: &str) -> (&str, Option<&str>) {
-    match id.rsplit_once('+') {
-        Some((base, agent)) => (base, Some(agent)),
-        None => (id, None),
+impl ScoreFormatter {
+    /// Compute the % cost diff for a key, or `f64::NAN` if not applicable.
+    fn cost_diff_pct(&self, key: &BenchModelKey) -> f64 {
+        let (base, agent) = split_agent_suffix(&key.bench_id.0);
+        if agent.is_none() {
+            return f64::NAN;
+        }
+        let entry = self.agg.for_key(key);
+        match self.agg.baseline_cost_per_run(base, &key.model_id.0) {
+            Some(base_cpp) => pct_cost_diff(entry.cost_per_run(), base_cpp),
+            None => f64::NAN,
+        }
     }
 }

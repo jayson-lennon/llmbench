@@ -107,5 +107,5 @@ pub(super) fn pct_cost_diff(agent_per_run: f64, baseline_per_run: f64) -> f64 {
 }
 
 pub(super) fn format_pct_cost_diff(pct: f64) -> String {
-    format!("+{pct:.2}%")
+    format!("{pct:+.2}%")
 }
