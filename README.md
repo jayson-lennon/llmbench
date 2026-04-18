@@ -5,7 +5,7 @@ A CLI tool for running 1-short benchmarks for Large Language Models via the [Ope
 ## Features
 
 - Run benchmarks on multiple models and tasks concurrently.
-- Composable prompts: combine benchmark prompts with agent `.md` files to test how system prompts affect results.
+- AGENTS.md support
 - Filter and select specific benchmarks, models, or model groups.
 - Doesn't re-run completed tasks.
 - Evaluate responses and report pass/fail with token usage and cost breakdown.
