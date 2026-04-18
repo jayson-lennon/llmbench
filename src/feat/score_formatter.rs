@@ -9,12 +9,15 @@ use owo_colors::{
 };
 
 use crate::{
+    feat::bench::BenchId,
     feat::cli::eval::SortColumn,
     feat::evaluator::score::{BenchModelKey, ScoredBench, Scores},
+    feat::model::ModelId,
 };
 
 const MARK_PASS: &str = "✅ Pass";
 const MARK_FAIL: &str = "❌ Fail";
+const NCOLS: usize = 10;
 
 // ── Column layout ───────────────────────────────────────────────────────────
 
@@ -30,37 +33,41 @@ struct ColWidths {
     out_tokens: usize,
     reason: usize,
     cost: usize,
+    cost_diff: usize,
 }
 
-/// A single row of 9 pre-padded cell values.
-struct Row([Cow<'static, str>; 9]);
+impl ColWidths {
+    fn as_array(&self) -> [usize; NCOLS] {
+        [
+            self.bench,
+            self.agent,
+            self.model,
+            self.result,
+            self.passed,
+            self.in_tokens,
+            self.out_tokens,
+            self.reason,
+            self.cost,
+            self.cost_diff,
+        ]
+    }
+}
+
+/// A single row of pre-padded cell values.
+struct Row([Cow<'static, str>; NCOLS]);
 
 impl Row {
     /// Build a row from raw values + column widths.
-    fn new(
-        cols: [Cow<'_, str>; 9],
-        widths: &ColWidths,
-    ) -> Self {
-        let widths = [
-            widths.bench,
-            widths.agent,
-            widths.model,
-            widths.result,
-            widths.passed,
-            widths.in_tokens,
-            widths.out_tokens,
-            widths.reason,
-            widths.cost,
-        ];
+    fn new(cols: [Cow<'_, str>; NCOLS], widths: &ColWidths) -> Self {
+        let w = widths.as_array();
         let cells: Vec<Cow<'static, str>> = cols
             .into_iter()
-            .zip(widths)
-            .map(|(val, w)| pad_str(&val, w, ' ').into_owned().into())
+            .zip(w)
+            .map(|(val, width)| pad_str(&val, width, ' ').into_owned().into())
             .collect();
-        let arr: [Cow<'static, str>; 9] = cells.try_into().unwrap_or_else(|v: Vec<_>| {
-            panic!("expected 9 cells, got {}", v.len())
-        });
-        Self(arr)
+        Self(cells.try_into().unwrap_or_else(|v: Vec<_>| {
+            panic!("expected {NCOLS} cells, got {}", v.len())
+        }))
     }
 
     /// Header labels.
@@ -76,6 +83,7 @@ impl Row {
                 "out".into(),
                 "reason".into(),
                 "cost ($USD)    ".into(),
+                "% cost diff  ".into(),
             ],
             w,
         )
@@ -90,11 +98,8 @@ impl Row {
 
     /// Separator line of dashes.
     fn separator(w: &ColWidths) -> Self {
-        let widths = [
-            w.bench, w.agent, w.model, w.result, w.passed,
-            w.in_tokens, w.out_tokens, w.reason, w.cost,
-        ];
-        let cells: Vec<Cow<'static, str>> = widths
+        let w = w.as_array();
+        let cells: Vec<Cow<'static, str>> = w
             .iter()
             .map(|&width| pad_str("", width, '-').into_owned().into())
             .collect();
@@ -123,6 +128,13 @@ struct EntryAgg {
     cost: f64,
     passed: usize,
     runs: usize,
+}
+
+impl EntryAgg {
+    #[allow(clippy::cast_precision_loss)]
+    fn cost_per_run(&self) -> f64 {
+        if self.runs == 0 { 0.0 } else { self.cost / self.runs as f64 }
+    }
 }
 
 #[derive(Default, Clone, Debug)]
@@ -171,6 +183,16 @@ impl AggregatedScores {
         };
         self.entries.get(key).unwrap_or(&DEFAULT)
     }
+
+    /// Look up the baseline (no-agent) entry for a given bench base name + model.
+    fn baseline_cost_per_run(&self, bench_base: &str, model_id: &str) -> Option<f64> {
+        let key = BenchModelKey {
+            bench_id: BenchId(bench_base.to_string()),
+            model_id: ModelId(model_id.to_string()),
+        };
+        let entry = self.entries.get(&key)?;
+        (entry.runs > 0).then_some(entry.cost_per_run())
+    }
 }
 
 // ── Formatter ───────────────────────────────────────────────────────────────
@@ -192,6 +214,7 @@ impl ScoreFormatter {
         let mut in_tokens_width = 2;  // "in"
         let mut out_tokens_width = 3; // "out"
         let mut reason_width = 6;     // "reason"
+        let mut cost_diff_width = "% cost diff  ".len();
 
         for (key, _) in &scores {
             let (base, agent) = split_agent_suffix(&key.bench_id.0);
@@ -207,6 +230,15 @@ impl ScoreFormatter {
             reason_width = reason_width.max(
                 if entry.reasoning_tokens > 0 { digits(entry.reasoning_tokens) } else { 1 }
             );
+
+            // Compute actual % cost diff string for width
+            if agent.is_some() {
+                if let Some(base_cpp) = agg.baseline_cost_per_run(base, &key.model_id.0) {
+                    let cpp = entry.cost_per_run();
+                    let pct = pct_cost_diff(cpp, base_cpp);
+                    cost_diff_width = cost_diff_width.max(format_pct_cost_diff(pct).len());
+                }
+            }
         }
 
         let widths = ColWidths {
@@ -219,6 +251,7 @@ impl ScoreFormatter {
             out_tokens: out_tokens_width,
             reason: reason_width,
             cost: "cost ($USD)    ".len(),
+            cost_diff: cost_diff_width,
         };
 
         Self { scores, widths, agg }
@@ -274,6 +307,18 @@ impl ScoreFormatter {
                 "-".to_string()
             };
 
+            // % cost diff: compare per-run cost against baseline (no-agent)
+            let cost_diff_str = if agent_suffix.is_some() {
+                self.agg
+                    .baseline_cost_per_run(base_bench, &key.model_id.0)
+                    .map_or_else(
+                        || "-".to_string(),
+                        |base_cpp| format_pct_cost_diff(pct_cost_diff(entry.cost_per_run(), base_cpp)),
+                    )
+            } else {
+                "-".to_string()
+            };
+
             let row = Row::new(
                 [
                     base_bench.to_string().into(),
@@ -285,6 +330,7 @@ impl ScoreFormatter {
                     n_out.to_string().into(),
                     n_reason_str.into(),
                     format!("${cost:.9}").into(),
+                    cost_diff_str.into(),
                 ],
                 &self.widths,
             );
@@ -324,6 +370,7 @@ impl ScoreFormatter {
                 totals.completion_tokens.to_string().into(),
                 nreason_str.into(),
                 cost_str.into(),
+                "-".into(),
             ],
             &self.widths,
         );
@@ -408,6 +455,18 @@ fn get_chat_summary(response: &ScoredBench) -> Vec<ChatSummary> {
             })
         })
         .collect()
+}
+
+// ── Cost diff calculation ───────────────────────────────────────────────────
+
+/// Compute percentage cost difference: `((agent_per_run - baseline_per_run) / baseline_per_run) * 100`
+#[allow(clippy::cast_precision_loss)]
+fn pct_cost_diff(agent_per_run: f64, baseline_per_run: f64) -> f64 {
+    (agent_per_run - baseline_per_run) / baseline_per_run * 100.0
+}
+
+fn format_pct_cost_diff(pct: f64) -> String {
+    format!("+{pct:.2}%")
 }
 
 // ── Padding utilities ───────────────────────────────────────────────────────
