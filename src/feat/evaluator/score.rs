@@ -1,27 +1,12 @@
 use std::collections::HashMap;
 
 use bon::Builder;
-use openrouter::completions::response::Choice;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     feat::bench::{BenchId, BenchResult},
     feat::model::ModelId,
 };
-
-pub trait GetMessageExt {
-    /// Returns a message (if any).
-    fn get_message(&self) -> Option<String>;
-}
-
-impl GetMessageExt for &Choice {
-    fn get_message(&self) -> Option<String> {
-        match self {
-            Choice::NonStreaming(choice) => choice.message.content.clone(),
-            _ => unimplemented!("only non-streaming responses are supported"),
-        }
-    }
-}
 
 /// A scored bench.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +32,14 @@ pub struct Score {
     /// This will be filled in automatically by the evaluator harness.
     #[builder(default)]
     pub completion_tokens: u32,
+
+    /// Total prompt tokens.
+    #[builder(default)]
+    pub prompt_tokens: u32,
+
+    /// Total reasoning tokens.
+    #[builder(default)]
+    pub reasoning_tokens: u32,
 }
 
 impl Score {

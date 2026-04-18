@@ -31,7 +31,7 @@ pub struct BenchArgs {
     model_groups: Vec<String>,
 
     /// OpenRouter API key. (Prefer OPENROUTER_API_KEY env variable for security)
-    #[arg(short, long)]
+    #[arg(long)]
     api_key: Option<String>,
 
     /// Number of runs per bench
@@ -112,7 +112,7 @@ fn get_and_validate_benches(args: &BenchArgs) -> Result<Benches, Report<[CliErro
     let patterns: Vec<&str> = if args.benches.is_empty() {
         vec!["*"]
     } else {
-        args.benches.iter().map(|s| s.as_str()).collect()
+        args.benches.iter().map(String::as_str).collect()
     };
 
     let mut all_benches = Vec::new();

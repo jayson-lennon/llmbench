@@ -51,6 +51,10 @@ pub struct EvalArgs {
     #[arg(short, long)]
     agents: Option<String>,
 
+    /// Hide bare (no agent) bench results when -a is specified.
+    #[arg(long)]
+    no_bare: bool,
+
     /// Override prompts directory (default: src/prompts/)
     #[arg(short, long)]
     prompts_dir: Option<PathBuf>,
@@ -72,7 +76,7 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
     let patterns: Vec<&str> = if args.benches.is_empty() {
         vec!["*"]
     } else {
-        args.benches.iter().map(|s| s.as_str()).collect()
+        args.benches.iter().map(String::as_str).collect()
     };
 
     let mut all_discovered = Vec::new();
@@ -118,23 +122,44 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
             .collect();
     }
 
-    // Filter by bench pattern (support glob on full bench ID including +agents suffix)
-    let bench_patterns: Vec<&str> = if args.benches.is_empty() {
-        vec![]
-    } else {
-        args.benches.iter().map(|s| s.as_str()).collect()
-    };
+    // Filter by bench pattern and agent
+    //
+    // When -a is specified:
+    //   - Keep agent variants matching the agent pattern
+    //   - Keep bare variants unless --no-bare
+    //   - Both filtered by the bench pattern
+    // When -a is not specified:
+    //   - Keep everything matching bench pattern
+    let bench_patterns: Vec<&str> = args.benches.iter().map(String::as_str).collect();
+    let agent_pattern = args.agents.as_deref();
+    let show_bare = !args.no_bare;
 
-    if !bench_patterns.is_empty() {
-        scores = scores
-            .into_iter()
-            .filter(|(key, _)| {
-                bench_patterns
+    scores = scores
+        .into_iter()
+        .filter(|(key, _)| {
+            let full_id = &key.bench_id.0;
+            let (base_bench, agent_suffix) = split_agent_suffix(full_id);
+
+            // Filter by bench pattern
+            if !bench_patterns.is_empty()
+                && !bench_patterns
                     .iter()
-                    .any(|pattern| matches_bench_id(&key.bench_id.0, pattern))
-            })
-            .collect();
-    }
+                    .any(|p| matches_bench_id(base_bench, p))
+            {
+                return false;
+            }
+
+            // Filter by agent
+            match (agent_pattern, agent_suffix) {
+                // No -a flag: show everything
+                (None, _) => true,
+                // -a specified, this row is bare: show unless --no-bare
+                (Some(_), None) => show_bare,
+                // -a specified, this row has an agent: check it matches
+                (Some(pat), Some(agent)) => matches_bench_id(agent, pat),
+            }
+        })
+        .collect();
 
     let formatter = ScoreFormatter::format(scores);
     formatter.print(args.sort, args.condensed);
@@ -143,15 +168,16 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
 }
 
 fn matches_bench_id(id: &str, pattern: &str) -> bool {
-    if contains_glob_chars(pattern) {
-        glob::Pattern::new(pattern).is_ok_and(|pat| pat.matches(id))
-    } else {
-        id == pattern
-    }
+    glob::Pattern::new(pattern).is_ok_and(|pat| pat.matches(id))
 }
 
-fn contains_glob_chars(s: &str) -> bool {
-    s.chars().any(|c| matches!(c, '*' | '?' | '[' | '{'))
+/// Split `category/name+agent` into (`category/name`, Some(`agent`)).
+/// If no `+`, returns (`id`, None).
+fn split_agent_suffix(id: &str) -> (&str, Option<&str>) {
+    match id.rsplit_once('+') {
+        Some((base, agent)) => (base, Some(agent)),
+        None => (id, None),
+    }
 }
 
 use crate::feat::evaluator::score::{ScoredBench, Scores};
@@ -182,6 +208,22 @@ fn score_responses(
                 res.usage
                     .as_ref()
                     .map_or(0, |usage| tokens + usage.completion_tokens)
+            });
+            score.prompt_tokens = response.responses.iter().fold(0, |tokens, res| {
+                res.usage
+                    .as_ref()
+                    .map_or(0, |usage| tokens + usage.prompt_tokens)
+            });
+            score.reasoning_tokens = response.responses.iter().fold(0, |tokens, res| {
+                res.usage
+                    .as_ref()
+                    .map_or(0, |usage| {
+                        tokens
+                            + usage
+                                .completion_tokens_details
+                                .as_ref()
+                                .map_or(0, |d| d.reasoning_tokens)
+                    })
             });
 
             scored.push(ScoredBench { result: response, score });

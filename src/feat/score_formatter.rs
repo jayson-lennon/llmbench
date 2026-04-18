@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use ansi_width::ansi_width;
 use openrouter::completions::response::Choice;
@@ -7,246 +8,383 @@ use owo_colors::{
     colors::{Cyan, Red, css::Gray},
 };
 
-const MARK_PASS: &str = "✅ Pass";
-const MARK_FAIL: &str = "❌ Fail";
-const HEADER_BENCH: &str = "bench";
-const HEADER_MODEL: &str = "model";
-const HEADER_RESULT: &str = "result";
-const HEADER_PASSED: &str = "passed";
-const HEADER_OUTPUT_TOKENS: &str = "tokens";
-const HEADER_COST: &str = "cost ($USD)    ";
-
-const HEADER_SUMMARY_PCT_PASS: &str = "% pass";
-
 use crate::{
     feat::cli::eval::SortColumn,
-    feat::evaluator::score::{ScoredBench, Scores},
+    feat::evaluator::score::{BenchModelKey, ScoredBench, Scores},
 };
 
-type TableWidth = usize;
+const MARK_PASS: &str = "✅ Pass";
+const MARK_FAIL: &str = "❌ Fail";
+
+// ── Column layout ───────────────────────────────────────────────────────────
+
+/// Holds the computed widths for each column.
+#[derive(Debug, Clone)]
+struct ColWidths {
+    bench: usize,
+    agent: usize,
+    model: usize,
+    result: usize,
+    passed: usize,
+    in_tokens: usize,
+    out_tokens: usize,
+    reason: usize,
+    cost: usize,
+}
+
+/// A single row of 9 pre-padded cell values.
+struct Row([Cow<'static, str>; 9]);
+
+impl Row {
+    /// Build a row from raw values + column widths.
+    fn new(
+        cols: [Cow<'_, str>; 9],
+        widths: &ColWidths,
+    ) -> Self {
+        let widths = [
+            widths.bench,
+            widths.agent,
+            widths.model,
+            widths.result,
+            widths.passed,
+            widths.in_tokens,
+            widths.out_tokens,
+            widths.reason,
+            widths.cost,
+        ];
+        let cells: Vec<Cow<'static, str>> = cols
+            .into_iter()
+            .zip(widths)
+            .map(|(val, w)| pad_str(&val, w, ' ').into_owned().into())
+            .collect();
+        let arr: [Cow<'static, str>; 9] = cells.try_into().unwrap_or_else(|v: Vec<_>| {
+            panic!("expected 9 cells, got {}", v.len())
+        });
+        Self(arr)
+    }
+
+    /// Header labels.
+    fn header(w: &ColWidths) -> Self {
+        Self::new(
+            [
+                "bench".into(),
+                "agent".into(),
+                "model".into(),
+                "result".into(),
+                "passed".into(),
+                "in".into(),
+                "out".into(),
+                "reason".into(),
+                "cost ($USD)    ".into(),
+            ],
+            w,
+        )
+    }
+
+    /// Summary header (% pass replaces result).
+    fn summary_header(w: &ColWidths) -> Self {
+        let mut row = Self::header(w);
+        row.0[3] = pad_str("% pass", w.result, ' ').into_owned().into();
+        row
+    }
+
+    /// Separator line of dashes.
+    fn separator(w: &ColWidths) -> Self {
+        let widths = [
+            w.bench, w.agent, w.model, w.result, w.passed,
+            w.in_tokens, w.out_tokens, w.reason, w.cost,
+        ];
+        let cells: Vec<Cow<'static, str>> = widths
+            .iter()
+            .map(|&width| pad_str("", width, '-').into_owned().into())
+            .collect();
+        Self(cells.try_into().unwrap())
+    }
+
+    /// Render the row with ` | ` dividers.
+    fn render(&self, sep: &str) -> String {
+        let mut out = String::from(sep);
+        for cell in &self.0 {
+            out.push_str(cell);
+            out.push_str(sep);
+        }
+        out
+    }
+}
+
+// ── Pre-computed aggregates ─────────────────────────────────────────────────
+
+#[derive(Clone, Default, Debug)]
+#[allow(clippy::struct_field_names)]
+struct EntryAgg {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    reasoning_tokens: u32,
+    cost: f64,
+    passed: usize,
+    runs: usize,
+}
+
+#[derive(Default, Clone, Debug)]
+struct AggregatedScores {
+    entries: HashMap<BenchModelKey, EntryAgg>,
+}
+
+impl AggregatedScores {
+    fn build(scores: &Scores) -> Self {
+        let mut agg = Self::default();
+        for score in scores.values().flatten() {
+            agg.add(score);
+        }
+        agg
+    }
+
+    fn add(&mut self, bench: &ScoredBench) {
+        let key = BenchModelKey {
+            bench_id: bench.result.bench.clone(),
+            model_id: bench.result.model.clone(),
+        };
+        let entry = self.entries.entry(key).or_default();
+        entry.runs += 1;
+        entry.passed += usize::from(bench.score.passed);
+        for res in &bench.result.responses {
+            if let Some(usage) = &res.usage {
+                entry.prompt_tokens += usage.prompt_tokens;
+                entry.completion_tokens += usage.completion_tokens;
+                entry.reasoning_tokens += usage
+                    .completion_tokens_details
+                    .as_ref()
+                    .map_or(0, |d| d.reasoning_tokens);
+                entry.cost += usage.cost.unwrap_or_default();
+            }
+        }
+    }
+
+    fn for_key(&self, key: &BenchModelKey) -> &EntryAgg {
+        static DEFAULT: EntryAgg = EntryAgg {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            reasoning_tokens: 0,
+            cost: 0.0,
+            passed: 0,
+            runs: 0,
+        };
+        self.entries.get(key).unwrap_or(&DEFAULT)
+    }
+}
+
+// ── Formatter ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct ScoreFormatter {
     scores: Scores,
-
-    /// Width of the "bench name" column.
-    bench_width: usize,
-
-    /// Width of the "model name" column.
-    model_width: usize,
-
-    /// Width of the "result" column.
-    result_width: usize,
-
-    /// Width of the "passed" column.
-    passed_width: usize,
-
-    /// Width of the "output tokens" column.
-    output_tokens_width: usize,
-
-    /// Width of the "cost" column.
-    cost_width: usize,
+    widths: ColWidths,
+    agg: AggregatedScores,
 }
 
 impl ScoreFormatter {
     pub fn format(scores: Scores) -> Self {
-        let mut bench_width = 1;
+        let agg = AggregatedScores::build(&scores);
+
+        let mut bench_width = 4; // "bench"
+        let mut agent_width = 5; // "agent"
         let mut model_width = 1;
-        for score in scores.values().flatten() {
-            if score.result.bench.len() > bench_width {
-                bench_width = score.result.bench.len();
+        let mut in_tokens_width = 2;  // "in"
+        let mut out_tokens_width = 3; // "out"
+        let mut reason_width = 6;     // "reason"
+
+        for (key, _) in &scores {
+            let (base, agent) = split_agent_suffix(&key.bench_id.0);
+            bench_width = bench_width.max(base.len());
+            if let Some(agent) = agent {
+                agent_width = agent_width.max(agent.len());
             }
-            if score.result.model.len() > model_width {
-                model_width = score.result.model.len();
-            }
+            model_width = model_width.max(key.model_id.len());
+
+            let entry = agg.for_key(key);
+            in_tokens_width = in_tokens_width.max(digits(entry.prompt_tokens));
+            out_tokens_width = out_tokens_width.max(digits(entry.completion_tokens));
+            reason_width = reason_width.max(
+                if entry.reasoning_tokens > 0 { digits(entry.reasoning_tokens) } else { 1 }
+            );
         }
-        Self {
-            scores,
-            bench_width,
-            model_width,
-            result_width: ansi_width(MARK_PASS),
-            passed_width: ansi_width(HEADER_PASSED) + 3,
-            output_tokens_width: ansi_width(HEADER_OUTPUT_TOKENS) + 2,
-            cost_width: ansi_width(HEADER_COST),
-        }
+
+        let widths = ColWidths {
+            bench: bench_width,
+            agent: agent_width,
+            model: model_width,
+            result: ansi_width(MARK_PASS),
+            passed: "passed".len() + 3,
+            in_tokens: in_tokens_width,
+            out_tokens: out_tokens_width,
+            reason: reason_width,
+            cost: "cost ($USD)    ".len(),
+        };
+
+        Self { scores, widths, agg }
     }
 
-    #[allow(clippy::too_many_lines)]
     pub fn print(&self, sort_column: SortColumn, condensed: bool) {
         if self.scores.is_empty() {
             println!("no scores matching the filter criteria");
             return;
         }
 
+        let sep = " | ";
         let div = " | ".fg::<Gray>().to_string();
-        self.print_header(&div);
 
-        let table_width = self.print_table_width_line();
+        println!("{}", Row::header(&self.widths).render(sep));
+        let separator = Row::separator(&self.widths);
+        println!("{}", separator.render(sep).fg::<Gray>());
+        let table_width = ansi_width(&separator.render(sep));
 
-        let mut scores = self.scores.iter().collect::<Vec<_>>();
-        scores.sort_by(|(a, _), (b, _)| match sort_column {
+        // Sort entries by the requested column
+        let mut entries: Vec<_> = self.scores.iter().collect();
+        entries.sort_by(|(a, _), (b, _)| match sort_column {
             SortColumn::Bench => a.bench_id.cmp(&b.bench_id),
             SortColumn::Model => a.model_id.cmp(&b.model_id),
         });
 
         let mut totals = Totals::default();
 
-        // scores table
-        {
-            // summary line
-            for (key, scores) in &self.scores {
-                let n_runs = scores.len();
-                let n_passed = get_number_of_passed_tests(scores);
-                {
-                    totals.passed += n_passed;
-                    totals.runs += n_runs;
-                }
-                let passed_all = n_passed == n_runs;
+        for (key, scores) in &entries {
+            let entry = self.agg.for_key(key);
+            let n_runs = entry.runs;
+            let n_passed = entry.passed;
+            totals.passed += n_passed;
+            totals.runs += n_runs;
+            let passed_all = n_passed == n_runs;
 
-                let result_str = get_formatted_pass_fail_section(passed_all);
+            let result_str = format_pass_fail(passed_all);
+            let passed_str = format_passed(n_runs, n_passed, passed_all);
+            let n_in = entry.prompt_tokens;
+            let n_out = entry.completion_tokens;
+            let n_reason = entry.reasoning_tokens;
+            totals.prompt_tokens += n_in;
+            totals.completion_tokens += n_out;
+            totals.reasoning_tokens += n_reason;
 
-                let passed_str = get_formatted_passed_section(n_runs, n_passed, passed_all);
+            let cost = entry.cost;
+            totals.cost += cost;
 
-                let n_tokens = get_number_of_tokens(scores);
-                {
-                    totals.tokens += n_tokens;
-                }
-                let cost = get_monetary_cost(scores);
-                {
-                    totals.cost += cost;
-                }
+            let (base_bench, agent_suffix) = split_agent_suffix(&key.bench_id.0);
+            let n_reason_str = if n_reason > 0 {
+                n_reason.to_string()
+            } else {
+                "-".to_string()
+            };
 
-                let bench = key.bench_id.to_string();
-                let model = key.model_id.to_string();
+            let row = Row::new(
+                [
+                    base_bench.to_string().into(),
+                    agent_suffix.unwrap_or("").to_string().into(),
+                    key.model_id.to_string().into(),
+                    result_str.into(),
+                    passed_str.into(),
+                    n_in.to_string().into(),
+                    n_out.to_string().into(),
+                    n_reason_str.into(),
+                    format!("${cost:.9}").into(),
+                ],
+                &self.widths,
+            );
+            println!("{}", row.render(sep));
 
-                let cost_str = format!("${cost:.9}");
-
-                println!(
-                    "{div}{bench}{div}{model}{div}{result_str}{div}{passed_str}{div}{n_tokens}{div}{cost}{div}",
-                    bench = bench.pad(self.bench_width),
-                    model = model.pad(self.model_width),
-                    result_str = result_str.pad(self.result_width),
-                    passed_str = passed_str.center(self.passed_width).pad(self.passed_width),
-                    n_tokens = n_tokens.to_string().pad(self.output_tokens_width),
-                    cost = cost_str.pad(self.cost_width)
-                );
-
-                // response summary
-                if !condensed {
-                    for (response_index, response) in scores.iter().enumerate() {
-                        let chat = get_chat_summary(response);
-
-                        let response_number = response_index + 1;
-                        let pass = response.score.passed;
-                        // format individual messages
-                        for (turn_index, message) in chat.iter().enumerate() {
-                            let message = message.content.replace('\n', " ");
-                            let rnumber_str = get_formatted_response_number(response_number, pass);
-                            let tnumber_str =
-                                format!("{}: ", turn_index + 1).fg::<Gray>().to_string();
-                            print!("{div}  {rnumber_str}{tnumber_str}",);
-                            let wrapped_message = textwrap::wrap(&message, table_width - 13);
-                            for (i, msg) in wrapped_message.iter().enumerate() {
-                                let msg = msg.fg::<Gray>();
-                                if i == 0 {
-                                    println!("{msg}");
-                                } else {
-                                    println!("{div}       {msg}");
-                                }
-                            }
-                        }
-                    }
-                }
+            // ── Response details ────────────────────────────────────────
+            if !condensed {
+                print_response_details(scores, &div, table_width);
             }
         }
 
-        // total summary
-        {
-            let width = self.table_width();
-            let divider = format!(" {}", "".pad_with_char(width - 2, '='));
+        // ── Summary ─────────────────────────────────────────────────────
 
-            println!("{divider}", divider = divider.fg::<Gray>());
+        let divider_line = format!(" {}", pad_str("", table_width - 2, '=').into_owned());
+        println!("{}", divider_line.fg::<Gray>());
 
-            let header = format!(
-                "{div}{bench}{div}{model}{div}{pct_pass}{div}{npassed}{div}{ntokens}{div}{cost}{div}",
-                bench = "".pad(self.bench_width),
-                model = "".pad(self.model_width),
-                pct_pass = HEADER_SUMMARY_PCT_PASS.pad(self.result_width),
-                npassed = HEADER_PASSED.pad(self.passed_width),
-                ntokens = HEADER_OUTPUT_TOKENS.pad(self.output_tokens_width),
-                cost = HEADER_COST.pad(self.cost_width)
-            );
-            println!("{header}");
-            self.print_table_width_line();
+        println!("{}", Row::summary_header(&self.widths).render(sep));
+        println!("{}", separator.render(sep).fg::<Gray>());
 
-            let pct_pass = format!("{:.2}%", (totals.pct_pass() * 100.0));
-            let cost_str = format!("${:.9}", totals.cost);
-            let passed_str = {
-                let passed = if totals.passed == totals.runs {
-                    format!("{}", totals.passed).fg::<Cyan>().to_string()
-                } else {
-                    format!("{}", totals.passed).fg::<Red>().to_string()
-                };
-                let passed_str = format!("{}/{}", passed, totals.runs.to_string().fg::<Cyan>());
-                passed_str
-            };
-            let summary_line = format!(
-                "{div}{bench}{div}{model}{div}{pct_pass}{div}{npassed}{div}{ntokens}{div}{cost}{div}",
-                bench = "".pad(self.bench_width),
-                model = "".pad(self.model_width),
-                pct_pass = pct_pass.pad(self.result_width),
-                npassed = passed_str.center(self.passed_width).pad(self.passed_width),
-                ntokens = totals.tokens.to_string().pad(self.output_tokens_width),
-                cost = cost_str.pad(self.cost_width)
-            );
-            println!("{summary_line}");
-        }
-    }
+        let pct_pass = format!("{:.2}%", totals.pct_pass() * 100.0);
+        let cost_str = format!("${:.9}", totals.cost);
+        let passed_str = format_totals_passed(&totals);
+        let nreason_str = if totals.reasoning_tokens > 0 {
+            totals.reasoning_tokens.to_string()
+        } else {
+            "-".to_string()
+        };
 
-    fn print_header(&self, div: &str) {
-        let header = format!(
-            "{div}{bench}{div}{model}{div}{result}{div}{npassed}{div}{ntokens}{div}{cost}{div}",
-            bench = HEADER_BENCH.pad(self.bench_width),
-            model = HEADER_MODEL.pad(self.model_width),
-            result = HEADER_RESULT.pad(self.result_width),
-            npassed = HEADER_PASSED.pad(self.passed_width),
-            ntokens = HEADER_OUTPUT_TOKENS.pad(self.output_tokens_width),
-            cost = HEADER_COST.pad(self.cost_width)
+        let summary = Row::new(
+            [
+                String::new().into(),
+                String::new().into(),
+                String::new().into(),
+                pct_pass.into(),
+                passed_str.into(),
+                totals.prompt_tokens.to_string().into(),
+                totals.completion_tokens.to_string().into(),
+                nreason_str.into(),
+                cost_str.into(),
+            ],
+            &self.widths,
         );
-        println!("{header}",);
-    }
-
-    fn table_width(&self) -> TableWidth {
-        let plus = " + ";
-        let line = format!(
-            "{plus}{bench}{plus}{model}{plus}{result}{plus}{npassed}{plus}{ntokens}{plus}{cost}{plus}",
-            bench = "".pad_with_char(self.bench_width, '-'),
-            model = "".pad_with_char(self.model_width, '-'),
-            result = "".pad_with_char(self.result_width, '-'),
-            npassed = "".pad_with_char(self.passed_width, '-'),
-            ntokens = "".pad_with_char(self.output_tokens_width, '-'),
-            cost = "".pad_with_char(self.cost_width, '-'),
-        );
-        ansi_width(&line)
-    }
-
-    fn print_table_width_line(&self) -> TableWidth {
-        let plus = " + ";
-        let line = format!(
-            "{plus}{bench}{plus}{model}{plus}{result}{plus}{npassed}{plus}{ntokens}{plus}{cost}{plus}",
-            bench = "".pad_with_char(self.bench_width, '-'),
-            model = "".pad_with_char(self.model_width, '-'),
-            result = "".pad_with_char(self.result_width, '-'),
-            npassed = "".pad_with_char(self.passed_width, '-'),
-            ntokens = "".pad_with_char(self.output_tokens_width, '-'),
-            cost = "".pad_with_char(self.cost_width, '-'),
-        );
-        println!("{line}", line = line.fg::<Gray>());
-        ansi_width(&line)
+        println!("{}", summary.render(sep));
     }
 }
 
-fn get_formatted_response_number(response_number: usize, pass: bool) -> String {
+// ── Display helpers ─────────────────────────────────────────────────────────
+
+fn format_pass_fail(passed: bool) -> String {
+    if passed {
+        MARK_PASS.fg::<Cyan>().to_string()
+    } else {
+        MARK_FAIL.fg::<Red>().to_string()
+    }
+}
+
+fn format_passed(n_runs: usize, n_passed: usize, passed_all: bool) -> String {
+    let n = if passed_all {
+        format!("{n_passed}").fg::<Cyan>().to_string()
+    } else {
+        format!("{n_passed}").fg::<Red>().to_string()
+    };
+    format!("{}/{}", n, format!("{n_runs}").fg::<Cyan>())
+}
+
+fn format_totals_passed(totals: &Totals) -> String {
+    let passed = if totals.passed == totals.runs {
+        format!("{}", totals.passed).fg::<Cyan>().to_string()
+    } else {
+        format!("{}", totals.passed).fg::<Red>().to_string()
+    };
+    format!("{}/{}", passed, totals.runs.to_string().fg::<Cyan>())
+}
+
+fn print_response_details(scores: &[ScoredBench], div: &str, table_width: usize) {
+    for (response_index, response) in scores.iter().enumerate() {
+        let chat = get_chat_summary(response);
+        let response_number = response_index + 1;
+        let pass = response.score.passed;
+        for (turn_index, message) in chat.iter().enumerate() {
+            let message = message.content.replace('\n', " ");
+            let rnumber = format_response_number(response_number, pass);
+            let tnumber = format!("{}: ", turn_index + 1).fg::<Gray>().to_string();
+            print!("{div}  {rnumber}{tnumber}");
+            for (i, msg) in textwrap::wrap(&message, table_width - 13)
+                .iter()
+                .enumerate()
+            {
+                let msg = msg.fg::<Gray>();
+                if i == 0 {
+                    println!("{msg}");
+                } else {
+                    println!("{div}       {msg}");
+                }
+            }
+        }
+    }
+}
+
+fn format_response_number(response_number: usize, pass: bool) -> String {
     let text = format!("{response_number}R");
     if pass {
         text.fg::<Cyan>().to_string()
@@ -255,176 +393,53 @@ fn get_formatted_response_number(response_number: usize, pass: bool) -> String {
     }
 }
 
-fn get_number_of_passed_tests(scores: &[ScoredBench]) -> usize {
-    scores.iter().fold(0, |pass, response| {
-        let diff = usize::from(response.score.passed);
-        pass + diff
-    })
-}
-
-fn get_formatted_pass_fail_section(passed_all: bool) -> String {
-    if passed_all {
-        MARK_PASS.fg::<Cyan>().to_string()
-    } else {
-        MARK_FAIL.fg::<Red>().to_string()
-    }
-}
-
-fn get_formatted_passed_section(n_runs: usize, n_passed: usize, passed_all: bool) -> String {
-    let n_passed_str = if passed_all {
-        format!("{n_passed}").fg::<Cyan>().to_string()
-    } else {
-        format!("{n_passed}").fg::<Red>().to_string()
-    };
-    let n_runs = format!("{n_runs}").fg::<Cyan>().to_string();
-    format!("{n_passed_str}/{n_runs}")
-}
-
 fn get_chat_summary(response: &ScoredBench) -> Vec<ChatSummary> {
     response
         .result
         .responses
         .iter()
         .flat_map(|res| {
-            res.choices
-                .iter()
-                .map(|choice| match choice {
-                    Choice::NonStreaming(choice) => ChatSummary {
-                        _role: choice.message.role.clone(),
-                        content: choice.message.content.clone().unwrap_or_default(),
-                    },
-                    _ => unimplemented!(),
-                })
-                .collect::<Vec<_>>()
+            res.choices.iter().map(|choice| match choice {
+                Choice::NonStreaming(c) => ChatSummary {
+                    _role: c.message.role.clone(),
+                    content: c.message.content.clone().unwrap_or_default(),
+                },
+                _ => unimplemented!(),
+            })
         })
-        .collect::<Vec<_>>()
+        .collect()
 }
 
-fn get_monetary_cost(scores: &[ScoredBench]) -> f64 {
-    scores
-        .iter()
-        .flat_map(|res| &res.result.responses)
-        .fold(0.0, |cost, res| {
-            cost + res
-                .usage
-                .as_ref()
-                .map(|usage| usage.cost.unwrap_or_default())
-                .unwrap_or_default()
-        })
-}
-
-fn get_number_of_tokens(scores: &[ScoredBench]) -> u32 {
-    scores
-        .iter()
-        .flat_map(|res| &res.result.responses)
-        .fold(0, |tokens, res| {
-            tokens
-                + res
-                    .usage
-                    .as_ref()
-                    .map(|usage| usage.completion_tokens)
-                    .unwrap_or_default()
-        })
-}
+// ── Padding utilities ───────────────────────────────────────────────────────
 
 fn pad_str(input: &str, amount: usize, ch: char) -> Cow<'_, str> {
     let visual_len = ansi_width(input);
     if visual_len < amount {
         let diff = amount - visual_len;
-        let padding = (0..diff).map(|_| ch);
-        let mut input = String::from(input);
-        input.extend(padding);
-        Cow::Owned(input)
+        let mut out = String::with_capacity(input.len() + diff);
+        out.push_str(input);
+        out.extend((0..diff).map(|_| ch));
+        Cow::Owned(out)
     } else {
         Cow::Borrowed(input)
     }
 }
 
-/// Extension methods to make it easier to pad strings.
-///
-/// Note that this is ANSI color-code aware and operates on the visual representation of the text
-/// in the terminal.
-trait PadExt {
-    fn pad(&self, len: usize) -> Cow<'_, str>;
-    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str>;
-    fn center(&self, width: usize) -> Cow<'_, str>;
+/// Number of decimal digits needed to represent `n`.
+fn digits(n: u32) -> usize {
+    n.checked_ilog10().map_or(1, |d| d as usize + 1)
 }
 
-impl PadExt for String {
-    fn pad(&self, len: usize) -> Cow<'_, str> {
-        pad_str(self.as_str(), len, ' ')
-    }
-
-    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
-        pad_str(self.as_str(), len, ch)
-    }
-
-    fn center(&self, width: usize) -> Cow<'_, str> {
-        let text_size = ansi_width(self);
-        if text_size < width.saturating_sub(1) {
-            // |xx       | (9 wide, 2 len)
-            // |   xx    | (9-2) = 7/2 = 3.5(trunc) = 3
-            let padding = (width - text_size) / 2;
-            let mut text = String::new();
-            text.extend((0..padding).map(|_| ' '));
-            text.push_str(self);
-            text.extend((0..padding).map(|_| ' '));
-            Cow::Owned(text)
-        } else {
-            Cow::Borrowed(self)
-        }
+/// Split `category/name+agent` into (`category/name`, Some(`agent`)).
+/// If no `+`, returns (`id`, None).
+fn split_agent_suffix(id: &str) -> (&str, Option<&str>) {
+    match id.rsplit_once('+') {
+        Some((base, agent)) => (base, Some(agent)),
+        None => (id, None),
     }
 }
 
-impl PadExt for Cow<'_, str> {
-    fn pad(&self, len: usize) -> Cow<'_, str> {
-        pad_str(self, len, ' ')
-    }
-    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
-        pad_str(self, len, ch)
-    }
-
-    fn center(&self, width: usize) -> Cow<'_, str> {
-        let text_size = ansi_width(self);
-        if text_size < width.saturating_sub(1) {
-            // |xx       | (9 wide, 2 len)
-            // |   xx    | (9-2) = 7/2 = 3.5(trunc) = 3
-            let padding = (width - text_size) / 2;
-            let mut text = String::new();
-            text.extend((0..padding).map(|_| ' '));
-            text.push_str(self);
-            text.extend((0..padding).map(|_| ' '));
-            Cow::Owned(text)
-        } else {
-            Cow::Borrowed(self)
-        }
-    }
-}
-
-impl PadExt for &'static str {
-    fn pad(&self, len: usize) -> Cow<'_, str> {
-        pad_str(self, len, ' ')
-    }
-    fn pad_with_char(&self, len: usize, ch: char) -> Cow<'_, str> {
-        pad_str(self, len, ch)
-    }
-
-    fn center(&self, width: usize) -> Cow<'_, str> {
-        let text_size = ansi_width(self);
-        if text_size < width.saturating_sub(1) {
-            // |xx       | (9 wide, 2 len)
-            // |   xx    | (9-2) = 7/2 = 3.5(trunc) = 3
-            let padding = (width - text_size) / 2;
-            let mut text = String::new();
-            text.extend((0..padding).map(|_| ' '));
-            text.push_str(self);
-            text.extend((0..padding).map(|_| ' '));
-            Cow::Owned(text)
-        } else {
-            Cow::Borrowed(self)
-        }
-    }
-}
+// ── Minor types ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 struct ChatSummary {
@@ -436,7 +451,9 @@ struct ChatSummary {
 struct Totals {
     passed: usize,
     runs: usize,
-    tokens: u32,
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    reasoning_tokens: u32,
     cost: f64,
 }
 

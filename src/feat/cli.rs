@@ -80,8 +80,20 @@ async fn select_models(
                 .collect::<SelectedModels>()
         }
         (false, true) => {
-            // Models only: select specified models
-            models.iter().cloned().collect::<SelectedModels>()
+            // Models only: resolve patterns against config
+            let all_models = Models::load_from(&shared_args.config)
+                .await
+                .change_context(CliError)
+                .attach("failed to load models from config file")?;
+            all_models
+                .into_iter()
+                .filter(|candidate| {
+                    models.iter().any(|pattern| {
+                        glob::Pattern::new(pattern.as_str())
+                            .is_ok_and(|pat| pat.matches(candidate.as_str()))
+                    })
+                })
+                .collect::<SelectedModels>()
         }
         (false, false) => {
             // Both specified: unreachable (Clap enforces mutual exclusion)

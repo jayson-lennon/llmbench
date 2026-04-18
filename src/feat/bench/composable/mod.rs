@@ -66,6 +66,9 @@ fn parse_frontmatter(content: &str) -> Result<(BenchFrontmatter, &str), Report<C
 /// Walk `dir` recursively for `.md` files, parse frontmatter, filter by glob pattern.
 /// If `pattern` contains glob metacharacters it is treated as a glob; otherwise exact match.
 /// The bench ID is derived from the relative path (strip dir prefix + `.md` suffix).
+///
+/// # Panics
+/// Panics if a discovered file path cannot be made relative to `dir`.
 pub fn discover_benches(
     dir: &Path,
     pattern: &str,
@@ -108,6 +111,9 @@ pub fn discover_benches(
 
 /// Walk `dir` for `.md` files, filter by pattern.
 /// Returns (name, content) pairs where name is the filename minus `.md`.
+///
+/// # Panics
+/// Panics if a discovered file path has no filename component.
 pub fn discover_agents(
     dir: &Path,
     pattern: &str,
@@ -256,16 +262,8 @@ fn make_evaluator(expected: String) -> Evaluator {
 }
 
 fn matches_pattern(id: &str, pattern: &str) -> bool {
-    if contains_glob_chars(pattern) {
-        glob::Pattern::new(pattern)
-            .is_ok_and(|pat| pat.matches(id))
-    } else {
-        id == pattern
-    }
-}
-
-fn contains_glob_chars(s: &str) -> bool {
-    s.chars().any(|c| matches!(c, '*' | '?' | '[' | '{'))
+    glob::Pattern::new(pattern)
+        .is_ok_and(|pat| pat.matches(id))
 }
 
 /// Recursively collect all `.md` files under `dir`.
