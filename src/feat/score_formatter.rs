@@ -1,5 +1,5 @@
 use ansi_width::ansi_width;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, colors::css::Gray};
 
 use crate::{
     feat::cli::eval::SortColumn,
@@ -38,7 +38,7 @@ impl ScoreFormatter {
         let mut in_tokens_width = 2;  // "in"
         let mut out_tokens_width = 3; // "out"
         let mut reason_width = 6;     // "reason"
-        let mut cost_diff_width = "% cost diff  ".len();
+        let mut cost_diff_width = "% cost Δ".len();
 
         for (key, _) in &scores {
             let (base, agent) = split_agent_suffix(&key.bench_id.0);
@@ -74,7 +74,7 @@ impl ScoreFormatter {
             in_tokens: in_tokens_width,
             out_tokens: out_tokens_width,
             reason: reason_width,
-            cost: "cost ($USD)    ".len(),
+            cost: "total cost ($USD)".len(),
             cost_diff: cost_diff_width,
         };
 
@@ -88,13 +88,12 @@ impl ScoreFormatter {
             return;
         }
 
-        let sep = " | ";
-        let div = " | ".fg::<owo_colors::colors::css::Gray>().to_string();
+        let div = " | ".fg::<Gray>().to_string();
 
-        println!("{}", Row::header(&self.widths).render(sep));
+        println!("{}", Row::header(&self.widths).render());
         let separator = Row::separator(&self.widths);
-        println!("{}", separator.render(sep).fg::<owo_colors::colors::css::Gray>());
-        let table_width = ansi_width(&separator.render(sep));
+        println!("{}", separator.render_separator());
+        let table_width = ansi_width(&separator.render());
 
         // Sort entries by the requested column
         let mut entries: Vec<_> = self.scores.iter().collect();
@@ -159,12 +158,12 @@ impl ScoreFormatter {
                     n_in.to_string().into(),
                     n_out.to_string().into(),
                     n_reason_str.into(),
-                    format!("${cost:.9}").into(),
+                    format!("${:.9}", entry.cost_per_run()).into(),
                     cost_diff_str.into(),
                 ],
                 &self.widths,
             );
-            println!("{}", row.render(sep));
+            println!("{}", row.render());
 
             // ── Response details ────────────────────────────────────────
             if !condensed {
@@ -178,10 +177,10 @@ impl ScoreFormatter {
             " {}",
             row::pad_str("", table_width - 2, '=').into_owned()
         );
-        println!("{}", divider_line.fg::<owo_colors::colors::css::Gray>());
+        println!("{}", divider_line.fg::<Gray>());
 
-        println!("{}", Row::summary_header(&self.widths).render(sep));
-        println!("{}", separator.render(sep).fg::<owo_colors::colors::css::Gray>());
+        println!("{}", Row::summary_header(&self.widths).render());
+        println!("{}", separator.render_separator());
 
         let pct_pass = format!("{:.2}%", totals.pct_pass() * 100.0);
         let cost_str = format!("${:.9}", totals.cost);
@@ -207,7 +206,7 @@ impl ScoreFormatter {
             ],
             &self.widths,
         );
-        println!("{}", summary.render(sep));
+        println!("{}", summary.render());
     }
 }
 

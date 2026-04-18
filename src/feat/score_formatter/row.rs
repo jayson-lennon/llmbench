@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use ansi_width::ansi_width;
+use owo_colors::{OwoColorize, colors::css::Gray};
 
 use super::NCOLS;
 
@@ -65,18 +66,30 @@ impl Row {
                 "in".into(),
                 "out".into(),
                 "reason".into(),
-                "cost ($USD)    ".into(),
-                "% cost diff  ".into(),
+                "cost/run ($USD)".into(),
+                "% cost Δ".into(),
             ],
             w,
         )
     }
 
-    /// Summary header (% pass replaces result).
+    /// Summary header — only show labels for aggregated columns.
     pub(super) fn summary_header(w: &ColWidths) -> Self {
-        let mut row = Self::header(w);
-        row.0[3] = pad_str("% pass", w.result, ' ').into_owned().into();
-        row
+        Self::new(
+            [
+                String::new().into(),
+                String::new().into(),
+                String::new().into(),
+                "% pass".into(),
+                "passed".into(),
+                "in".into(),
+                "out".into(),
+                String::new().into(),
+                "total cost ($USD)".into(),
+                String::new().into(),
+            ],
+            w,
+        )
     }
 
     /// Separator line of dashes.
@@ -89,12 +102,25 @@ impl Row {
         Self(cells.try_into().unwrap())
     }
 
-    /// Render the row with ` | ` dividers.
-    pub(super) fn render(&self, sep: &str) -> String {
-        let mut out = String::from(sep);
+    /// Render the row with dark gray ` | ` dividers.
+    pub(super) fn render(&self) -> String {
+        let sep_str = " | ".fg::<Gray>().to_string();
+        let mut out = sep_str.clone();
         for cell in &self.0 {
             out.push_str(cell);
-            out.push_str(sep);
+            out.push_str(&sep_str);
+        }
+        out
+    }
+
+    /// Render a separator row with dark gray ` + ` junctions.
+    /// All cell content (dashes) is also colored gray.
+    pub(super) fn render_separator(&self) -> String {
+        let junction = " + ".fg::<Gray>().to_string();
+        let mut out = junction.clone();
+        for cell in &self.0 {
+            out.push_str(&cell.fg::<Gray>().to_string());
+            out.push_str(&junction);
         }
         out
     }
