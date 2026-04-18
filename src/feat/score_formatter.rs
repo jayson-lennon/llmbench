@@ -1,201 +1,25 @@
-use std::borrow::Cow;
-use std::collections::HashMap;
-
 use ansi_width::ansi_width;
-use openrouter::completions::response::Choice;
-use owo_colors::{
-    OwoColorize,
-    colors::{Cyan, Red, css::Gray},
-};
+use owo_colors::OwoColorize;
 
 use crate::{
-    feat::bench::BenchId,
     feat::cli::eval::SortColumn,
-    feat::evaluator::score::{BenchModelKey, ScoredBench, Scores},
-    feat::model::ModelId,
+    feat::evaluator::score::Scores,
 };
+
+mod aggregate;
+mod display;
+mod row;
 
 const MARK_PASS: &str = "✅ Pass";
 const MARK_FAIL: &str = "❌ Fail";
 const NCOLS: usize = 10;
 
-// ── Column layout ───────────────────────────────────────────────────────────
-
-/// Holds the computed widths for each column.
-#[derive(Debug, Clone)]
-struct ColWidths {
-    bench: usize,
-    agent: usize,
-    model: usize,
-    result: usize,
-    passed: usize,
-    in_tokens: usize,
-    out_tokens: usize,
-    reason: usize,
-    cost: usize,
-    cost_diff: usize,
-}
-
-impl ColWidths {
-    fn as_array(&self) -> [usize; NCOLS] {
-        [
-            self.bench,
-            self.agent,
-            self.model,
-            self.result,
-            self.passed,
-            self.in_tokens,
-            self.out_tokens,
-            self.reason,
-            self.cost,
-            self.cost_diff,
-        ]
-    }
-}
-
-/// A single row of pre-padded cell values.
-struct Row([Cow<'static, str>; NCOLS]);
-
-impl Row {
-    /// Build a row from raw values + column widths.
-    fn new(cols: [Cow<'_, str>; NCOLS], widths: &ColWidths) -> Self {
-        let w = widths.as_array();
-        let cells: Vec<Cow<'static, str>> = cols
-            .into_iter()
-            .zip(w)
-            .map(|(val, width)| pad_str(&val, width, ' ').into_owned().into())
-            .collect();
-        Self(cells.try_into().unwrap_or_else(|v: Vec<_>| {
-            panic!("expected {NCOLS} cells, got {}", v.len())
-        }))
-    }
-
-    /// Header labels.
-    fn header(w: &ColWidths) -> Self {
-        Self::new(
-            [
-                "bench".into(),
-                "agent".into(),
-                "model".into(),
-                "result".into(),
-                "passed".into(),
-                "in".into(),
-                "out".into(),
-                "reason".into(),
-                "cost ($USD)    ".into(),
-                "% cost diff  ".into(),
-            ],
-            w,
-        )
-    }
-
-    /// Summary header (% pass replaces result).
-    fn summary_header(w: &ColWidths) -> Self {
-        let mut row = Self::header(w);
-        row.0[3] = pad_str("% pass", w.result, ' ').into_owned().into();
-        row
-    }
-
-    /// Separator line of dashes.
-    fn separator(w: &ColWidths) -> Self {
-        let w = w.as_array();
-        let cells: Vec<Cow<'static, str>> = w
-            .iter()
-            .map(|&width| pad_str("", width, '-').into_owned().into())
-            .collect();
-        Self(cells.try_into().unwrap())
-    }
-
-    /// Render the row with ` | ` dividers.
-    fn render(&self, sep: &str) -> String {
-        let mut out = String::from(sep);
-        for cell in &self.0 {
-            out.push_str(cell);
-            out.push_str(sep);
-        }
-        out
-    }
-}
-
-// ── Pre-computed aggregates ─────────────────────────────────────────────────
-
-#[derive(Clone, Default, Debug)]
-#[allow(clippy::struct_field_names)]
-struct EntryAgg {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    reasoning_tokens: u32,
-    cost: f64,
-    passed: usize,
-    runs: usize,
-}
-
-impl EntryAgg {
-    #[allow(clippy::cast_precision_loss)]
-    fn cost_per_run(&self) -> f64 {
-        if self.runs == 0 { 0.0 } else { self.cost / self.runs as f64 }
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-struct AggregatedScores {
-    entries: HashMap<BenchModelKey, EntryAgg>,
-}
-
-impl AggregatedScores {
-    fn build(scores: &Scores) -> Self {
-        let mut agg = Self::default();
-        for score in scores.values().flatten() {
-            agg.add(score);
-        }
-        agg
-    }
-
-    fn add(&mut self, bench: &ScoredBench) {
-        let key = BenchModelKey {
-            bench_id: bench.result.bench.clone(),
-            model_id: bench.result.model.clone(),
-        };
-        let entry = self.entries.entry(key).or_default();
-        entry.runs += 1;
-        entry.passed += usize::from(bench.score.passed);
-        for res in &bench.result.responses {
-            if let Some(usage) = &res.usage {
-                entry.prompt_tokens += usage.prompt_tokens;
-                entry.completion_tokens += usage.completion_tokens;
-                entry.reasoning_tokens += usage
-                    .completion_tokens_details
-                    .as_ref()
-                    .map_or(0, |d| d.reasoning_tokens);
-                entry.cost += usage.cost.unwrap_or_default();
-            }
-        }
-    }
-
-    fn for_key(&self, key: &BenchModelKey) -> &EntryAgg {
-        static DEFAULT: EntryAgg = EntryAgg {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            reasoning_tokens: 0,
-            cost: 0.0,
-            passed: 0,
-            runs: 0,
-        };
-        self.entries.get(key).unwrap_or(&DEFAULT)
-    }
-
-    /// Look up the baseline (no-agent) entry for a given bench base name + model.
-    fn baseline_cost_per_run(&self, bench_base: &str, model_id: &str) -> Option<f64> {
-        let key = BenchModelKey {
-            bench_id: BenchId(bench_base.to_string()),
-            model_id: ModelId(model_id.to_string()),
-        };
-        let entry = self.entries.get(&key)?;
-        (entry.runs > 0).then_some(entry.cost_per_run())
-    }
-}
-
-// ── Formatter ───────────────────────────────────────────────────────────────
+use aggregate::{AggregatedScores, Totals};
+use display::{
+    format_pass_fail, format_passed, format_pct_cost_diff,
+    format_totals_passed, pct_cost_diff, print_response_details,
+};
+use row::{ColWidths, Row};
 
 #[derive(Debug, Clone)]
 pub struct ScoreFormatter {
@@ -257,6 +81,7 @@ impl ScoreFormatter {
         Self { scores, widths, agg }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn print(&self, sort_column: SortColumn, condensed: bool) {
         if self.scores.is_empty() {
             println!("no scores matching the filter criteria");
@@ -264,11 +89,11 @@ impl ScoreFormatter {
         }
 
         let sep = " | ";
-        let div = " | ".fg::<Gray>().to_string();
+        let div = " | ".fg::<owo_colors::colors::css::Gray>().to_string();
 
         println!("{}", Row::header(&self.widths).render(sep));
         let separator = Row::separator(&self.widths);
-        println!("{}", separator.render(sep).fg::<Gray>());
+        println!("{}", separator.render(sep).fg::<owo_colors::colors::css::Gray>());
         let table_width = ansi_width(&separator.render(sep));
 
         // Sort entries by the requested column
@@ -313,7 +138,12 @@ impl ScoreFormatter {
                     .baseline_cost_per_run(base_bench, &key.model_id.0)
                     .map_or_else(
                         || "-".to_string(),
-                        |base_cpp| format_pct_cost_diff(pct_cost_diff(entry.cost_per_run(), base_cpp)),
+                        |base_cpp| {
+                            format_pct_cost_diff(pct_cost_diff(
+                                entry.cost_per_run(),
+                                base_cpp,
+                            ))
+                        },
                     )
             } else {
                 "-".to_string()
@@ -344,11 +174,14 @@ impl ScoreFormatter {
 
         // ── Summary ─────────────────────────────────────────────────────
 
-        let divider_line = format!(" {}", pad_str("", table_width - 2, '=').into_owned());
-        println!("{}", divider_line.fg::<Gray>());
+        let divider_line = format!(
+            " {}",
+            row::pad_str("", table_width - 2, '=').into_owned()
+        );
+        println!("{}", divider_line.fg::<owo_colors::colors::css::Gray>());
 
         println!("{}", Row::summary_header(&self.widths).render(sep));
-        println!("{}", separator.render(sep).fg::<Gray>());
+        println!("{}", separator.render(sep).fg::<owo_colors::colors::css::Gray>());
 
         let pct_pass = format!("{:.2}%", totals.pct_pass() * 100.0);
         let cost_str = format!("${:.9}", totals.cost);
@@ -378,111 +211,7 @@ impl ScoreFormatter {
     }
 }
 
-// ── Display helpers ─────────────────────────────────────────────────────────
-
-fn format_pass_fail(passed: bool) -> String {
-    if passed {
-        MARK_PASS.fg::<Cyan>().to_string()
-    } else {
-        MARK_FAIL.fg::<Red>().to_string()
-    }
-}
-
-fn format_passed(n_runs: usize, n_passed: usize, passed_all: bool) -> String {
-    let n = if passed_all {
-        format!("{n_passed}").fg::<Cyan>().to_string()
-    } else {
-        format!("{n_passed}").fg::<Red>().to_string()
-    };
-    format!("{}/{}", n, format!("{n_runs}").fg::<Cyan>())
-}
-
-fn format_totals_passed(totals: &Totals) -> String {
-    let passed = if totals.passed == totals.runs {
-        format!("{}", totals.passed).fg::<Cyan>().to_string()
-    } else {
-        format!("{}", totals.passed).fg::<Red>().to_string()
-    };
-    format!("{}/{}", passed, totals.runs.to_string().fg::<Cyan>())
-}
-
-fn print_response_details(scores: &[ScoredBench], div: &str, table_width: usize) {
-    for (response_index, response) in scores.iter().enumerate() {
-        let chat = get_chat_summary(response);
-        let response_number = response_index + 1;
-        let pass = response.score.passed;
-        for (turn_index, message) in chat.iter().enumerate() {
-            let message = message.content.replace('\n', " ");
-            let rnumber = format_response_number(response_number, pass);
-            let tnumber = format!("{}: ", turn_index + 1).fg::<Gray>().to_string();
-            print!("{div}  {rnumber}{tnumber}");
-            for (i, msg) in textwrap::wrap(&message, table_width - 13)
-                .iter()
-                .enumerate()
-            {
-                let msg = msg.fg::<Gray>();
-                if i == 0 {
-                    println!("{msg}");
-                } else {
-                    println!("{div}       {msg}");
-                }
-            }
-        }
-    }
-}
-
-fn format_response_number(response_number: usize, pass: bool) -> String {
-    let text = format!("{response_number}R");
-    if pass {
-        text.fg::<Cyan>().to_string()
-    } else {
-        text.fg::<Red>().to_string()
-    }
-}
-
-fn get_chat_summary(response: &ScoredBench) -> Vec<ChatSummary> {
-    response
-        .result
-        .responses
-        .iter()
-        .flat_map(|res| {
-            res.choices.iter().map(|choice| match choice {
-                Choice::NonStreaming(c) => ChatSummary {
-                    _role: c.message.role.clone(),
-                    content: c.message.content.clone().unwrap_or_default(),
-                },
-                _ => unimplemented!(),
-            })
-        })
-        .collect()
-}
-
-// ── Cost diff calculation ───────────────────────────────────────────────────
-
-/// Compute percentage cost difference: `((agent_per_run - baseline_per_run) / baseline_per_run) * 100`
-#[allow(clippy::cast_precision_loss)]
-fn pct_cost_diff(agent_per_run: f64, baseline_per_run: f64) -> f64 {
-    (agent_per_run - baseline_per_run) / baseline_per_run * 100.0
-}
-
-fn format_pct_cost_diff(pct: f64) -> String {
-    format!("+{pct:.2}%")
-}
-
-// ── Padding utilities ───────────────────────────────────────────────────────
-
-fn pad_str(input: &str, amount: usize, ch: char) -> Cow<'_, str> {
-    let visual_len = ansi_width(input);
-    if visual_len < amount {
-        let diff = amount - visual_len;
-        let mut out = String::with_capacity(input.len() + diff);
-        out.push_str(input);
-        out.extend((0..diff).map(|_| ch));
-        Cow::Owned(out)
-    } else {
-        Cow::Borrowed(input)
-    }
-}
+// ── Shared helpers ──────────────────────────────────────────────────────────
 
 /// Number of decimal digits needed to represent `n`.
 fn digits(n: u32) -> usize {
@@ -495,30 +224,5 @@ fn split_agent_suffix(id: &str) -> (&str, Option<&str>) {
     match id.rsplit_once('+') {
         Some((base, agent)) => (base, Some(agent)),
         None => (id, None),
-    }
-}
-
-// ── Minor types ─────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone)]
-struct ChatSummary {
-    _role: String,
-    content: String,
-}
-
-#[derive(Debug, Clone, Default)]
-struct Totals {
-    passed: usize,
-    runs: usize,
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    reasoning_tokens: u32,
-    cost: f64,
-}
-
-impl Totals {
-    #[allow(clippy::cast_precision_loss)]
-    fn pct_pass(&self) -> f64 {
-        self.passed as f64 / self.runs as f64
     }
 }
