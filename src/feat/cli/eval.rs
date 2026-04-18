@@ -107,13 +107,11 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
     all_discovered.sort_by(|a, b| a.id.cmp(&b.id));
     all_discovered.dedup_by(|a, b| a.id == b.id);
 
-    let agents = match &args.agents {
-        Some(pattern) => {
-            composable::discover_agents(&agents_dir, pattern)
-                .change_context(CliError)
-                .attach("failed to discover agents.md files")?
-        }
-        None => vec![],
+    let agents = {
+        let pattern = args.agents.as_deref().unwrap_or("*");
+        composable::discover_agents(&agents_dir, pattern)
+            .change_context(CliError)
+            .attach("failed to discover agents.md files")?
     };
 
     // Build evaluator map: bench_id -> eval_fn
