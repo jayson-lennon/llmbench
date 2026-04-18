@@ -19,4 +19,6 @@ fn main() {
 ```
 
 # **OUTPUT FORMAT**
+
 A single line with the number. No additional commentary.
+Example: `8`

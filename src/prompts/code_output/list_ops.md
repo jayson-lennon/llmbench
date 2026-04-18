@@ -17,4 +17,6 @@ print(result)
 ```
 
 # **OUTPUT FORMAT**
+
 A single line with the exact output including brackets. No additional commentary.
+Example: `[1, 2, 3]`
