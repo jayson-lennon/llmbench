@@ -1,8 +1,7 @@
-use crate::feat::bench::prelude::*;
+---
+expected = "gdpr data export tool"
+---
 
-impl_simple_bench!(
-    "decision_making/resource_allocation__naive",
-    r#"
 You are an engineering manager assigning a newly available engineer to a project. Which project should they be assigned to?
 
 ## Engineer Skills
@@ -20,6 +19,3 @@ You are an engineering manager assigning a newly available engineer to a project
 
 # **OUTPUT FORMAT**
 A single line with the project to assign the engineer to. No additional commentary.
-    "#,
-    expect_response!("gdpr data export tool")
-);

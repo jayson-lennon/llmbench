@@ -1,6 +1,14 @@
 models = [
-    "openai/gpt-oss-120b",
+    "deepseek/deepseek-v3.2",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-3-flash-preview",
+    "google/gemma-4-26b-a4b-it",
     "inception/mercury-2",
+    "minimax/minimax-m2.5",
+    "openai/gpt-oss-120b",
+    "z-ai/glm-4.5-air",
+    "z-ai/glm-4.7-flash",
+
     # free models
     # "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
     # "deepseek/deepseek-chat-v3.1:free",

@@ -1,16 +1,15 @@
-use std::{collections::HashMap, collections::VecDeque, str::FromStr, time::Duration};
+use std::{collections::HashMap, collections::VecDeque, path::PathBuf, time::Duration};
 
 use crate::{
-    error::{ErrContext, Suggestion},
+    error::Suggestion,
     feat::{
-        bench::{AllBenchResults, BENCHMARKS, BenchId, Benches, bench_matches_pattern, contains_glob_chars},
+        bench::{AllBenchResults, Benches, composable},
         cli::{CliError, SharedArgs, select_models},
         completion::{self, PromptPayloadBatch, RunConfig, RunPayload},
         model::{ModelId, SelectedModels},
         persistence::{ResultWriterCmd, spawn_result_writer},
     },
 };
-use crate::feat::bench::BenchError;
 use clap::Parser;
 use error_stack::{Report, ResultExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -38,6 +37,14 @@ pub struct BenchArgs {
     /// Number of runs per bench
     #[arg(long, default_value_t = 3)]
     n_runs: u32,
+
+    /// Agents.md file name or glob pattern from src/agents_md/ directory.
+    #[arg(short, long)]
+    agents: Option<String>,
+
+    /// Override prompts directory (default: src/prompts/)
+    #[arg(short, long)]
+    prompts_dir: Option<PathBuf>,
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -93,33 +100,43 @@ async fn select_and_validate_models(
     Ok(models)
 }
 
-/// Parses and validates the benchmark IDs specified in the command-line arguments.
-/// It loads all available benchmarks and filters them based on the provided IDs.
-/// If no IDs are specified, returns all benchmarks.
-/// Returns an error if any specified benchmark ID is invalid or not found.
+/// Discovers benches from the prompts directory, optionally composing with agents.md files.
 fn get_and_validate_benches(args: &BenchArgs) -> Result<Benches, Report<[CliError]>> {
-    let patterns = get_bench_patterns(args)?;
-    let benches = BENCHMARKS.iter().map(|init| init()).collect::<Benches>();
-    if patterns.is_empty() {
-        Ok(benches)
+    let prompts_dir = args
+        .prompts_dir
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("src/prompts"));
+    let agents_dir = PathBuf::from("src/agents_md");
+
+    // Collect bench patterns — empty means match all
+    let patterns: Vec<&str> = if args.benches.is_empty() {
+        vec!["*"]
     } else {
-        let matched: Benches = benches
-            .iter()
-            .filter(|bench| {
-                patterns
-                    .iter()
-                    .any(|pattern| bench_matches_pattern(&bench.id, pattern))
-            })
-            .cloned()
-            .collect();
-        if matched.benches.is_empty() {
-            return Err(Report::from(CliError).expand())
-                .attach("no benches matched the given patterns")
-                .attach_with(|| ErrContext::new(format!("patterns={:?}", patterns)))
-                .attach(Suggestion("make sure the bench exists"));
-        }
-        Ok(matched)
+        args.benches.iter().map(|s| s.as_str()).collect()
+    };
+
+    let mut all_benches = Vec::new();
+    for pattern in &patterns {
+        let discovered = composable::discover_benches(&prompts_dir, pattern)
+            .change_context(CliError)
+            .attach("failed to discover benches")?;
+        all_benches.extend(discovered);
     }
+
+    // Deduplicate by id
+    all_benches.sort_by(|a, b| a.id.cmp(&b.id));
+    all_benches.dedup_by(|a, b| a.id == b.id);
+
+    let agents = match &args.agents {
+        Some(pattern) => {
+            composable::discover_agents(&agents_dir, pattern)
+                .change_context(CliError)
+                .attach("failed to discover agents.md files")?
+        }
+        None => vec![],
+    };
+
+    Ok(composable::build_bench_set(&all_benches, &agents))
 }
 
 /// Loads existing benchmark results from the file specified in the shared arguments.
@@ -223,48 +240,4 @@ async fn wait_for_completion_and_shutdown(
     }
 
     let _ = result_writer.await;
-}
-
-fn get_bench_patterns(args: &BenchArgs) -> Result<Vec<String>, Report<[CliError]>> {
-    let mut error: Option<Report<[CliError]>> = None;
-    let (oks, errs): (Vec<_>, Vec<_>) = args
-        .benches
-        .iter()
-        .map(|input| validate_bench_pattern(input))
-        .partition(Result::is_ok);
-
-    for entry in errs {
-        let err = entry.unwrap_err();
-        if let Some(error) = error.as_mut() {
-            error.push(err.change_context(CliError));
-        } else {
-            error = Some(err.change_context(CliError).expand());
-        }
-    }
-
-    if let Some(error) = error {
-        Err(error)
-    } else {
-        Ok(oks.into_iter().flatten().collect::<Vec<_>>())
-    }
-}
-
-/// Validate a bench pattern. Non-glob patterns must follow `category/benchname` format.
-/// Glob patterns are validated by the `glob` crate.
-fn validate_bench_pattern(input: &str) -> Result<String, Report<BenchError>> {
-    if contains_glob_chars(input) {
-        glob::Pattern::new(input)
-            .map(|_| input.to_string())
-            .map_err(|e| {
-                Report::from(BenchError)
-                    .attach("invalid glob pattern")
-                    .attach(ErrContext::new(format!("input '{input}'")))
-                    .attach(ErrContext::new(format!("error: {e}")))
-                    .attach(Suggestion(
-                        "check glob syntax: * matches any characters, ? matches one character",
-                    ))
-            })
-    } else {
-        BenchId::from_str(input).map(|_| input.to_string())
-    }
 }

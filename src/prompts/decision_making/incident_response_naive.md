@@ -1,8 +1,7 @@
-use crate::feat::bench::prelude::*;
+---
+expected = "verify the most recent backup"
+---
 
-impl_simple_bench!(
-    "decision_making/incident_response__naive",
-    r#"
 You are an incident responder. An alert has fired. Which action should be taken FIRST?
 
 ## Incident Response Rules (apply in order)
@@ -22,6 +21,3 @@ An active network connection from an unknown IP address is detected to the produ
 
 # **OUTPUT FORMAT**
 A single line with the action to take first. No additional commentary.
-    "#,
-    expect_response!("verify the most recent backup")
-);

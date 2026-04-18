@@ -1,42 +1,5 @@
-pub mod helper;
+pub mod composable;
 
-/* *********************
-* bench modules below
-* ******************** */
-
-pub mod decision_making;
-pub mod summary;
-
-/* *********************
-* end bench modules
-* ******************** */
-
-pub(in crate::feat::bench) mod prelude {
-    pub use std::sync::Arc;
-
-    pub use error_stack::Report;
-    pub use linkme::distributed_slice;
-    pub use openrouter::OpenRouter;
-    pub use openrouter::completions::response::Choice;
-
-    pub(in crate::feat::bench) use crate::feat::{
-        bench::{
-            BENCHMARKS, Bench, BenchCtx, BenchId, BenchInit, BenchResult, BenchResultRequestExt,
-            BenchResultResponseExt,
-            helper::{
-                ResponseExt, StringBenchExt, assistant_message, expect_response, impl_simple_bench,
-                register_bench, register_eval, user_message,
-            },
-        },
-        completion::{
-            PromptRequest,
-            worker::{CompletionError, complete},
-        },
-        evaluator::{EVALUATORS, Evaluator, EvaluatorInit, Score, score::GetMessageExt},
-    };
-}
-
-use crate::error::{ErrContext, Suggestion};
 use crate::feat::completion::PromptRequest;
 use crate::feat::completion::worker::{CompletionError, RunHash};
 use crate::feat::model::ModelId;
@@ -44,36 +7,15 @@ use derive_more::Debug;
 use derive_more::Display;
 use error_stack::{Report, ResultExt};
 use futures::future::{BoxFuture, FutureExt};
-use linkme::distributed_slice;
 use openrouter::OpenRouter;
-use openrouter::completions::Response;
+use openrouter::completions::{request::Content, response::Choice, Response};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::{io::ErrorKind, path::Path};
 use tokio::{fs::OpenOptions, io::AsyncReadExt};
 
-/// Check if a bench ID matches a pattern.
-/// If the pattern contains glob metacharacters (`*`, `?`, `[`, `{`),
-/// it is treated as a glob pattern. Otherwise it must match exactly.
-pub fn bench_matches_pattern(bench_id: &BenchId, pattern: &str) -> bool {
-    let id = &bench_id.0;
-    if contains_glob_chars(pattern) {
-        glob::Pattern::new(pattern)
-            .is_ok_and(|pat| pat.matches(id))
-    } else {
-        id == pattern
-    }
-}
-
-pub fn contains_glob_chars(s: &str) -> bool {
-    s.chars().any(|c| matches!(c, '*' | '?' | '[' | '{'))
-}
-
-pub type BenchInit = fn() -> Bench;
-
-#[distributed_slice]
-pub static BENCHMARKS: [BenchInit];
+// ── Save-to-result traits ───────────────────────────────────────────────────
 
 pub trait BenchResultRequestExt {
     #[must_use]
@@ -99,6 +41,8 @@ impl BenchResultResponseExt for Response {
     }
 }
 
+// ── Bench result ────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
     /// Unique hash generated from model+run number+bench
@@ -123,6 +67,8 @@ impl BenchResult {
     }
 }
 
+// ── Context ─────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BenchCtx {
     pub run_number: u32,
@@ -130,9 +76,7 @@ pub struct BenchCtx {
     pub run_hash: RunHash,
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("a BenchError occurred")]
-pub struct BenchError;
+// ── Bench ID ────────────────────────────────────────────────────────────────
 
 #[derive(Display, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[display("{_0}")]
@@ -144,32 +88,7 @@ impl BenchId {
     }
 }
 
-impl FromStr for BenchId {
-    type Err = Report<BenchError>;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((category, name)) = s.split_once('/') {
-            if category.is_empty() {
-                return Err(Report::from(BenchError))
-                    .attach("missing category from bench id")
-                    .attach_with(|| ErrContext::new(format!("input '{s}'")))
-                    .attach(Suggestion("bench ID format must be 'category/benchname'"));
-            }
-            if name.is_empty() {
-                return Err(Report::from(BenchError))
-                    .attach("missing name from bench id")
-                    .attach(ErrContext::new(format!("input '{s}'")))
-                    .attach(Suggestion("bench ID format must be 'category/benchname'"));
-            }
-            Ok(Self(s.to_string()))
-        } else {
-            Err(Report::from(BenchError))
-                .attach("invalid id format")
-                .attach_with(|| ErrContext::new(format!("input '{s}'")))
-                .attach(Suggestion("bench ID format must be 'category/benchname'"))
-        }
-    }
-}
+// ── All bench results (persistence) ─────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct AllBenchResults {
@@ -263,6 +182,8 @@ impl FromIterator<BenchResult> for AllBenchResults {
     }
 }
 
+// ── Bench factory ───────────────────────────────────────────────────────────
+
 type BenchCallback = BoxFuture<'static, Result<BenchResult, Report<CompletionError>>>;
 type BenchFactory = Arc<dyn Fn(Arc<OpenRouter>, BenchCtx) -> BenchCallback + Send + Sync + 'static>;
 
@@ -292,16 +213,70 @@ impl Bench {
     }
 }
 
+// ── Utility traits/functions ────────────────────────────────────────────────
+
+/// Create a new user message.
+pub fn user_message<M>(msg: M) -> openrouter::completions::request::Message
+where
+    M: Into<String>,
+{
+    let msg = msg.into();
+    openrouter::completions::request::Message::User {
+        content: Content::Plain(msg),
+        name: None,
+        cache_control: None,
+    }
+}
+
+fn chat_tag_re() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| Regex::new(r"<\|.*?\|>").unwrap())
+}
+
+pub trait StringBenchExt {
+    fn alphanumeric_only(&self) -> String;
+    fn lowercase(&self) -> String;
+    fn remove_chat_tags(&self) -> String;
+}
+
+impl StringBenchExt for String {
+    fn alphanumeric_only(&self) -> String {
+        self.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect()
+    }
+
+    fn lowercase(&self) -> String {
+        self.to_lowercase()
+    }
+
+    fn remove_chat_tags(&self) -> String {
+        let re = chat_tag_re();
+        re.replace_all(self, "").to_string()
+    }
+}
+
+pub trait GetMessageExt {
+    fn get_message(&self) -> Option<String>;
+}
+
+impl GetMessageExt for &Choice {
+    fn get_message(&self) -> Option<String> {
+        match self {
+            Choice::NonStreaming(choice) => choice.message.content.clone(),
+            _ => None,
+        }
+    }
+}
+
+// ── Benches collection ──────────────────────────────────────────────────────
+
 #[derive(Debug)]
 pub struct Benches {
     pub benches: Vec<Bench>,
 }
 
 impl Benches {
-    pub fn contains(&self, id: &BenchId) -> bool {
-        self.benches.iter().any(|bench| &bench.id == id)
-    }
-
     pub fn iter(&self) -> std::slice::Iter<'_, Bench> {
         self.benches.iter()
     }

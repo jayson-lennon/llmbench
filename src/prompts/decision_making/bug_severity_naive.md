@@ -1,8 +1,7 @@
-use crate::feat::bench::prelude::*;
+---
+expected = "session data lost for all users"
+---
 
-impl_simple_bench!(
-    "decision_making/bug_severity__naive",
-    r#"
 You are a QA lead prioritizing bugs. Which bug should be fixed first?
 
 ## Priority Rules (apply in order)
@@ -18,6 +17,3 @@ You are a QA lead prioritizing bugs. Which bug should be fixed first?
 
 # **OUTPUT FORMAT**
 A single line with the bug to fix first. No additional commentary.
-    "#,
-    expect_response!("session data lost for all users")
-);

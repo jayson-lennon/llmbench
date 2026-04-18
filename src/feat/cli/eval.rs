@@ -1,13 +1,16 @@
+use std::{collections::HashMap, path::PathBuf};
+
 use crate::feat::{
-    bench::{AllBenchResults, bench_matches_pattern},
+    bench::{AllBenchResults, BenchId, composable},
     cli::{CliError, SharedArgs, select_models},
-    evaluator::Evaluators,
+    evaluator::Score,
     model::ModelId,
     score_formatter::ScoreFormatter,
 };
 use clap::{Parser, ValueEnum};
 use derive_more::Display;
 use error_stack::{Report, ResultExt};
+use openrouter::completions::response::Choice;
 
 /// Sort column
 #[derive(Copy, Debug, Default, Clone, ValueEnum, Display)]
@@ -24,7 +27,7 @@ pub enum SortColumn {
 /// Evaluate LLM responses
 #[derive(Parser, Debug)]
 pub struct EvalArgs {
-    /// Evaluate the specified benches.
+    /// Evaluate the specified benches. Supports glob patterns.
     #[arg(short, long)]
     benches: Vec<String>,
 
@@ -43,22 +46,67 @@ pub struct EvalArgs {
     /// Suppress individual model responses in output
     #[arg(short, long)]
     condensed: bool,
+
+    /// Agents.md file name or glob pattern from src/agents_md/ directory.
+    #[arg(short, long)]
+    agents: Option<String>,
+
+    /// Override prompts directory (default: src/prompts/)
+    #[arg(short, long)]
+    prompts_dir: Option<PathBuf>,
 }
 
 pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[CliError]>> {
     let responses = AllBenchResults::load(&shared_args.results)
         .await
         .change_context(CliError)
-        .attach("failed to load existing responses")?;
+        .attach("failed to load existing results")?;
 
-    let evaluators = Evaluators::default();
+    let prompts_dir = args
+        .prompts_dir
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("src/prompts"));
+    let agents_dir = PathBuf::from("src/agents_md");
 
-    // TODO: save/load results
+    // Discover benches and agents to build evaluators
+    let patterns: Vec<&str> = if args.benches.is_empty() {
+        vec!["*"]
+    } else {
+        args.benches.iter().map(|s| s.as_str()).collect()
+    };
 
-    let mut scores = evaluators.score(responses);
+    let mut all_discovered = Vec::new();
+    for pattern in &patterns {
+        let discovered = composable::discover_benches(&prompts_dir, pattern)
+            .change_context(CliError)
+            .attach("failed to discover benches")?;
+        all_discovered.extend(discovered);
+    }
+    all_discovered.sort_by(|a, b| a.id.cmp(&b.id));
+    all_discovered.dedup_by(|a, b| a.id == b.id);
 
+    let agents = match &args.agents {
+        Some(pattern) => {
+            composable::discover_agents(&agents_dir, pattern)
+                .change_context(CliError)
+                .attach("failed to discover agents.md files")?
+        }
+        None => vec![],
+    };
+
+    // Build evaluator map: bench_id -> eval_fn
+    let evaluator_entries = composable::build_evaluators(&all_discovered, &agents);
+    let evaluator_map: HashMap<BenchId, EvalFn> = evaluator_entries
+        .into_iter()
+        .map(|(bench_id, evaluator)| (bench_id, evaluator.eval))
+        .collect();
+
+    // Score responses
+    let scores = score_responses(responses, &evaluator_map);
+
+    // Filter by model
+    let mut scores = scores;
     let model_filter = select_models(&args.models, &args.model_groups, &shared_args).await?;
-
     if !model_filter.is_empty() {
         scores = scores
             .into_iter()
@@ -70,22 +118,75 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
             .collect();
     }
 
-    let bench_filter = args.benches;
+    // Filter by bench pattern (support glob on full bench ID including +agents suffix)
+    let bench_patterns: Vec<&str> = if args.benches.is_empty() {
+        vec![]
+    } else {
+        args.benches.iter().map(|s| s.as_str()).collect()
+    };
 
-    if !bench_filter.is_empty() {
+    if !bench_patterns.is_empty() {
         scores = scores
             .into_iter()
             .filter(|(key, _)| {
-                bench_filter
+                bench_patterns
                     .iter()
-                    .any(|pattern| bench_matches_pattern(&key.bench_id, pattern))
+                    .any(|pattern| matches_bench_id(&key.bench_id.0, pattern))
             })
             .collect();
     }
 
     let formatter = ScoreFormatter::format(scores);
-
     formatter.print(args.sort, args.condensed);
 
     Ok(())
+}
+
+fn matches_bench_id(id: &str, pattern: &str) -> bool {
+    if contains_glob_chars(pattern) {
+        glob::Pattern::new(pattern).is_ok_and(|pat| pat.matches(id))
+    } else {
+        id == pattern
+    }
+}
+
+fn contains_glob_chars(s: &str) -> bool {
+    s.chars().any(|c| matches!(c, '*' | '?' | '[' | '{'))
+}
+
+use crate::feat::evaluator::score::{ScoredBench, Scores};
+
+type EvalFn = Box<dyn Fn(&[Choice]) -> Score>;
+
+fn score_responses(
+    responses: AllBenchResults,
+    evaluator_map: &HashMap<BenchId, EvalFn>,
+) -> Scores {
+    let mut scored = Vec::new();
+
+    for response in responses {
+        if let Some(eval_fn) = evaluator_map.get(&response.bench) {
+            let choices: Vec<Choice> = response
+                .responses
+                .iter()
+                .flat_map(|res| res.choices.clone())
+                .collect();
+
+            let mut score = eval_fn(&choices);
+            score.cost = response.responses.iter().fold(0.0, |cost, res| {
+                res.usage
+                    .as_ref()
+                    .map_or(0.0, |usage| cost + usage.cost.unwrap_or_default())
+            });
+            score.completion_tokens = response.responses.iter().fold(0, |tokens, res| {
+                res.usage
+                    .as_ref()
+                    .map_or(0, |usage| tokens + usage.completion_tokens)
+            });
+
+            scored.push(ScoredBench { result: response, score });
+        }
+    }
+
+    Scores::from_iter(scored)
 }

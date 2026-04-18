@@ -1,8 +1,7 @@
-use crate::feat::bench::prelude::*;
+---
+expected = "block"
+---
 
-impl_simple_bench!(
-    "decision_making/deployment_gate__naive",
-    r#"
 You are a release engineer. Should this deployment proceed or be blocked?
 
 ## Deployment Gate Rules
@@ -18,6 +17,3 @@ All three conditions must be satisfied to proceed. If ANY condition fails, the d
 
 # **OUTPUT FORMAT**
 A single line: either "proceed" or "block". No additional commentary.
-    "#,
-    expect_response!("block")
-);

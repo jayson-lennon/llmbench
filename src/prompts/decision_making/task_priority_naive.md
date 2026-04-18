@@ -1,9 +1,8 @@
-use crate::feat::bench::prelude::*;
+---
+expected = "pick a game engine"
+---
 
-impl_simple_bench!(
-    "decision_making/task_priority__cot",
-    r#"
-I am working on a video game as a solo game developer. Given the following tasks for a video game development project for a city simulator, what item from the list below should I work on next in order to move the project forward in the most impactful way? Think through your answer step by step before responding.
+Given the following tasks for a video game development project for a city simulator, what should be worked on next?
 
 ## Building Graphics
 - [x] Residential zone
@@ -42,6 +41,3 @@ I am working on a video game as a solo game developer. Given the following tasks
 
 # **OUTPUT FORMAT**
 A single line with the task to work on. No additional commentary.
-"#,
-    expect_response!("pick a game engine")
-);
