@@ -1,23 +1,20 @@
 # LLM Bench
 
-A simple CLI tool for benchmarking Large Language Models via the [OpenRouter](https://openrouter.ai/) API. It sends predefined prompts to various models, evaluates the responses against expected outcomes, and reports pass/fail rates along with token usage and costs.
-
-## NOTE
-
-This is an experimental application created for my own personal use to iterate on different prompt styles. It doesn't include many benchmarks (PRs welcome).
+A CLI tool for running 1-short benchmarks for Large Language Models via the [OpenRouter](https://openrouter.ai/) API.
 
 ## Features
 
 - Run benchmarks on multiple models and tasks concurrently.
-- Filter and select specific benchmarks or models.
+- Composable prompts: combine benchmark prompts with agent `.md` files to test how system prompts affect results.
+- Filter and select specific benchmarks, models, or model groups.
 - Doesn't re-run completed tasks.
-- Evaluate responses with pluggable evaluators.
-- Output scores filtered by bench or model.
-- Group models into categories
+- Evaluate responses and report pass/fail with token usage and cost breakdown.
+- Per-agent and grand total summary tables with sorting by any column.
+- Group models into categories via config for easier model selection.
 
-## Installation
+## Usage
 
-Only source installation is currently supported.
+This software is designed to run from source:
 
 1. Install Rust if not already installed: [rustup.rs](https://rustup.rs)
 2. Clone the repo and build:
@@ -28,7 +25,7 @@ cd llmbench
 cargo build --release
 ```
 
-3. Use `cargo run` (or set up your `$PATH`)
+3. Run with `./target/release/llmbench` or use `cargo run --release -- YOUR_COMMANDS_HERE`
 
 ## Configuration
 
@@ -45,11 +42,16 @@ models = [
     "google/gemini-2.5-pro",
     "meta-llama/llama-4-maverick",
 ]
+
+[model_groups]
+cheap_stuff = [
+    "google/gemini-2.5-flash-lite",
+    "inception/mercury-2",
+    "meta-llama/llama-3.3-70b-instruct",
+]
 ```
 
 - Set `OPENROUTER_API_KEY` environment variable for authentication. See the `.env.example` file.
-
-Note that free models will get rate-limited and aren't suitable for running multiple benches nor multi-turn benches.
 
 ## Usage
 
@@ -58,167 +60,161 @@ Note that free models will get rate-limited and aren't suitable for running mult
 Run all benchmarks on all models (defaults to 3 runs per model per benchmark):
 
 ```
-cargo run --release -- bench
+llmbench bench
 ```
 
 Run specific benchmarks and models:
 
 ```
-cargo run --release -- bench -m "x-ai/grok-4" -m "qwen/qwen3-coder" --n-runs 2 task_priority__naive 
+llmbench bench -m "x-ai/grok-4" -m "qwen/qwen3-coder" --n-runs 2 logic/seating
 ```
+
+Run benchmarks composed with an agent `.md` file:
+
+```
+llmbench bench -a "forge-mythos"
+```
+
+The `-a` flag accepts a glob pattern matching `.md` files in `src/agents_md/`. When specified, each benchmark is run twice: once as a baseline (no agent) and once with the agent content prepended to the prompt.
 
 ### Evaluation
 
 Evaluate all results:
 
 ```
-cargo run --release -- eval
+llmbench eval
 ```
 
 Evaluate results, filtering by model and bench:
 
 ```
-cargo run --release -- eval -m "gpt-4o-mini" -b task_priority__naive
+llmbench eval -m "gpt-4o-mini" -b logic/seating
 ```
+
+Evaluate with agent filtering:
+
+```
+llmbench eval -a "forge-mythos"
+```
+
+Use `-c` / `--condensed` to suppress individual response output:
+
+```
+llmbench eval -c
+```
+
+#### Sorting
+
+Use `--sort` / `-s` to sort the output by a specific column:
+
+```
+llmbench eval -s model
+llmbench eval -s agent
+llmbench eval -s cost
+```
+
+Available sort columns: `bench` (default), `model`, `agent`, `in`, `out`, `reason`, `cost`, `cost-delta`.
 
 #### Output
 
-Running `eval` prints a table like:
+Running `eval` prints three sections:
 
-![Evaluation results](readme/eval.png)
+**1. Detail rows** — one row per bench + model + agent combination:
 
-Color coding is used for pass/fail: cyan for pass, red for fail.
+```
+ model  | bench          | AGENTS.md    | result   | passed | in     | out   | reason | cost/run ($USD) | % cost Δ
+--------+----------------+--------------+----------+--------+--------+-------+--------+-----------------+---------
+ model-a| logic/seating  |              | ✅ Pass  | 4/4    | 521    | 5981  | 5957   | $0.001132993    | -
+ model-a| logic/seating  | forge-mythos | ❌ Fail  | 0/4    | 16496  | 1925  | -      | $0.000721334    | +263.27%
+```
 
-The output is split into two major sections:
-1. The benchmark information including: name, model, result, pass/fail, response tokens, cost
-2. Responses from the LLMs
+**2. Per-agent summary** — aggregated totals grouped by `AGENTS.md` file, with pass rate, token usage, total cost, and median % cost delta:
 
-The response section displays the responses from the LLMs using this format:
+```
+        |          | AGENTS.md    | % pass  | passed  | in     | out    | reason | total cost ($USD) | med % cost Δ
+--------+----------+--------------+---------+---------+--------+--------+--------+-------------------+--------------
+        |          | (baseline)   | 86.88%  | 245/282 | 62784  | 77550  | 55456  | $0.058984334      | -
+        |          | forge-mythos | 88.57%  | 248/280 | 118483 | 58734  | 42614  | $0.133469179      | +432.74%
+```
+
+The `(baseline)` row shows aggregated stats for all runs without an `AGENTS.md`. Agent rows show how each agent performed overall. The `med % cost Δ` column shows the median cost difference compared to the baseline.
+
+**3. Grand totals** — the overall summary across all rows:
+
+```
+        |          | Grand totals | 87.72%  | 493/562 | 1247623| 136284 | 98070  | $0.192453513      | +432.74%
+```
+
+Color coding is used throughout: cyan for pass, red for fail.
+
+The response section (shown in non-condensed mode) displays LLM responses using this format:
 
 ```
 <run #>R<turn #>: <response>
 ```
 
-For example, if a benchmark has been ran twice for a specific model, you'll see output like this:
+For example, if a benchmark has been run twice for a specific model, you'll see output like this:
 
 ```
 1R1: <output from the first run>
 2R1: <output from the second run>
 ```
 
-For multi-turn benchmarks, the output looks like this:
+### Resetting Results
+
+Delete all results for a specific benchmark (all agents, all models):
+
 ```
-1R1: <output from first prompt, run 1>
-1R2: <output from second prompt, run 1>
-2R1: <output from first prompt, run 2>
-2R2: <output from second prompt, run 2>
-```
-
-You will see multi-turn responses marked as failed when _any part_ of benchmark fails. The model needs to get each step correct in order to pass.
-
-## Adding Benchmarks & Evaluators
-
-Benchmarks and evaluators exist in the same benchmark module for organizational purposes. It's recommended to copy an existing benchmark to start with and then modify the relevant parts. Benchmark modules are in `src/feat/bench/`.
-
-Benchmark modules have two submodules: `bench` and `eval`. Registration of the benchmark and evaluator both use a [distributed slice](https://docs.rs/linkme/latest/linkme/struct.DistributedSlice.html), so there is no need to change any other code when adding a new benchmark.
-
-For simple benchmarks having one prompt and one response, you can use macros:
-
-```rust
-use crate::feat::bench::prelude::*;
-
-impl_simple_bench!(
-    "category/foo",
-    r#"Reply with the word "foo" without quotes and without additional comment"#,
-    expect_response!("foo")
-);
+llmbench reset logic/seating
 ```
 
-If you need to perform additional processing, or have a multi-turn benchmark, then you'll need to use something like this:
+This removes both baseline and agent-composed results for the given bench ID. The argument is an exact match (no globs).
 
-```rust
-// The ID is shared between the bench and the evaluator.
-const ID: &str = "category/foo";
+## Adding Benchmarks
 
-mod bench {
-    use super::ID;
-    use crate::feat::bench::prelude::*;
+Benchmarks are defined as `.md` files in `src/prompts/` using TOML frontmatter. The file path (minus `.md`) becomes the bench ID.
 
-    register_bench!(run);
+### File format
 
-    async fn run(
-        api: Arc<OpenRouter>,
-        ctx: BenchCtx,
-    ) -> Result<BenchResult, Report<CompletionError>> {
-        let bench = BenchId(ID.to_string());
-        // Need this to track all requests and responses.
-        let mut result = BenchResult {
-            hash: ctx.run_hash,
-            bench: bench.clone(),
-            model: ctx.model.clone(),
-            requests: vec![],
-            responses: vec![],
-        };
+```markdown
+---
+expected = "charlie"
+---
 
-        // Build a request.
-        let request = PromptRequest::builder()
-            .model(ctx.model.to_string())
-            // Each request can have any number of "user" or "assistant" messages.
-            .messages(vec![user_message(PROMPT)])
-            .build()
-            // Remember to save it so all the data is available for analysis.
-            .save_to(&mut result);
-
-        // Use `complete` to send the request to the model.
-        let _ = complete(&api, request.clone(), &ctx.model, &bench)
-            .await?
-            // Remember to save it so all the data is available for analysis.
-            .save_to(&mut result);
-
-        // When done, return the result.
-        Ok(result)
-    }
-
-    const PROMPT: &str = r#"Reply with the word "foo" without quotes and without additional comment"#;
-}
-
-mod eval {
-    use super::ID;
-    use crate::feat::bench::prelude::*;
-
-    register_eval!(eval);
-
-    fn eval(responses: &[Choice]) -> Score {
-        match responses {
-            // Expecting a single message response.
-            [a] => match a.get_message() {
-                Some(a) => {
-                    let answer = a.lowercase().remove_chat_tags().alphanumeric_only().trim()
-                        == "foo";
-                    Score::builder().passed(answer).build()
-                }
-                // Empty message is a fail
-                _ => Score::fail(),
-            },
-            // Multiple messages is a fail
-            _ => Score::fail(),
-        }
-    }
-}
+Your prompt goes here.
 ```
 
-Helper functions and macros for benches are provided in the [helper.rs](src/feat/bench/helper.rs) file.
+The `expected` field in the frontmatter is the expected answer. The evaluator normalizes both the expected value and the model's response by lowercasing, stripping chat tags, and keeping only alphanumeric characters before comparison.
 
-## TODO
+### Directory structure
 
-- [ ] Add more benchmarks
-- [ ] Use pass/fail colors for individual turns on multi-turn evaluations (instead of all red if any turn fails)
-- [ ] Sort output
-- [ ] Display more statistics in the summary line like average or median
-- [ ] Save evaluation results instead of re-running the evaluators each time
-- [ ] Less code to create benchmarks and evaluators.
-- [x] Easy way to add "1 prompt, 1 answer" benchmarks.
-- [ ] Different storage backends
+```
+src/prompts/
+  logic/
+    seating.md      → bench ID: logic/seating
+    schedule.md     → bench ID: logic/schedule
+  decision_making/
+    triage.md       → bench ID: decision_making/triage
+  extraction/
+    flight.md       → bench ID: extraction/flight
+```
+
+### Adding agent prompts
+
+Agent prompts are `.md` files in `src/agents_md/`. The filename (minus `.md`) becomes the agent name. When an agent is specified, its content is prepended to the benchmark prompt:
+
+```
+src/agents_md/
+  forge-mythos.md   → agent name: forge-mythos
+```
+
+When composed, the resulting prompt is:
+
+```
+<agent content>
+---
+<benchmark prompt>
+```
 
 ## License
 

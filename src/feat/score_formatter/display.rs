@@ -41,26 +41,21 @@ pub(super) fn print_response_details(
     table_width: usize,
 ) {
     for (response_index, response) in scores.iter().enumerate() {
-        let chat = get_chat_summary(response);
+        let content = get_response_content(response);
         let response_number = response_index + 1;
         let pass = response.score.passed;
-        for (turn_index, message) in chat.iter().enumerate() {
-            let message = message.content.replace('\n', " ");
-            let rnumber = format_response_number(response_number, pass);
-            let tnumber = format!("{}: ", turn_index + 1)
-                .fg::<Gray>()
-                .to_string();
-            print!("{div}  {rnumber}{tnumber}");
-            for (i, msg) in textwrap::wrap(&message, table_width - 13)
-                .iter()
-                .enumerate()
-            {
-                let msg = msg.fg::<Gray>();
-                if i == 0 {
-                    println!("{msg}");
-                } else {
-                    println!("{div}       {msg}");
-                }
+        let message = content.replace('\n', " ");
+        let rnumber = format_response_number(response_number, pass);
+        print!("{div}  {rnumber} ");
+        for (i, msg) in textwrap::wrap(&message, table_width - 11)
+            .iter()
+            .enumerate()
+        {
+            let msg = msg.fg::<Gray>();
+            if i == 0 {
+                println!("{msg}");
+            } else {
+                println!("{div}       {msg}");
             }
         }
     }
@@ -75,27 +70,21 @@ pub(super) fn format_response_number(response_number: usize, pass: bool) -> Stri
     }
 }
 
-fn get_chat_summary(response: &ScoredBench) -> Vec<ChatSummary> {
+fn get_response_content(response: &ScoredBench) -> String {
     response
         .result
         .responses
         .iter()
         .flat_map(|res| {
             res.choices.iter().map(|choice| match choice {
-                Choice::NonStreaming(c) => ChatSummary {
-                    _role: c.message.role.clone(),
-                    content: c.message.content.clone().unwrap_or_default(),
-                },
+                Choice::NonStreaming(c) => {
+                    c.message.content.clone().unwrap_or_default()
+                }
                 _ => unimplemented!(),
             })
         })
-        .collect()
-}
-
-#[derive(Debug, Clone)]
-struct ChatSummary {
-    _role: String,
-    content: String,
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // ── Cost diff ───────────────────────────────────────────────────────────────

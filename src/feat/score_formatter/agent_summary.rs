@@ -51,7 +51,7 @@ impl AgentSummary {
                     group.totals.completion_tokens.to_string().into(),
                     nreason_str.into(),        // reason
                     cost_str.into(),           // total cost
-                    cost_diff_str.into(),      // % cost Δ med
+                    cost_diff_str.into(),      // med % cost Δ
                 ],
                 widths,
             );

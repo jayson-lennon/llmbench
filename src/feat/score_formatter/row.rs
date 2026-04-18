@@ -87,7 +87,7 @@ impl Row {
                 "out".into(),
                 String::new().into(),
                 "total cost ($USD)".into(),
-                "% cost Δ med".into(),
+                "med % cost Δ".into(),
             ],
             w,
         )

@@ -41,7 +41,7 @@ impl ScoreFormatter {
         let mut in_tokens_width = 2;  // "in"
         let mut out_tokens_width = 3; // "out"
         let mut reason_width = 6;     // "reason"
-        let mut cost_diff_width = "% cost Δ med".len();
+        let mut cost_diff_width = "med % cost Δ".len();
 
         let mut totals = Totals::default();
 
