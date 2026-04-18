@@ -6,7 +6,7 @@ use error_stack::{Report, ResultExt};
 use llmbench::{
     feat::{
         self,
-        cli::{BenchArgs, EvalArgs, SharedArgs},
+        cli::{BenchArgs, EvalArgs, ResetArgs, SharedArgs},
     },
     init,
 };
@@ -15,6 +15,7 @@ use llmbench::{
 pub enum Command {
     Bench(BenchArgs),
     Eval(EvalArgs),
+    Reset(ResetArgs),
 }
 
 /// A simple LLM benchmark tool.
@@ -58,6 +59,9 @@ async fn main() -> Result<(), Report<AppError>> {
             .await
             .change_context(AppError)?,
         Command::Eval(eval) => feat::cli::eval::run(eval, args.shared)
+            .await
+            .change_context(AppError)?,
+        Command::Reset(reset) => feat::cli::reset::run(reset, args.shared)
             .await
             .change_context(AppError)?,
     }

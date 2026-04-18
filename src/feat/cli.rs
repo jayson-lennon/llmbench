@@ -1,5 +1,6 @@
 pub mod bench;
 pub mod eval;
+pub mod reset;
 
 use std::path::PathBuf;
 
@@ -8,6 +9,7 @@ use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use error_stack::{Report, ResultExt};
 pub use eval::EvalArgs;
+pub use reset::ResetArgs;
 
 use crate::{
     error::ErrContext,

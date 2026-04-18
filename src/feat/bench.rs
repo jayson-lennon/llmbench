@@ -82,6 +82,14 @@ pub struct BenchCtx {
 #[display("{_0}")]
 pub struct BenchId(pub String);
 
+impl std::str::FromStr for BenchId {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_string()))
+    }
+}
+
 impl BenchId {
     pub const fn len(&self) -> usize {
         self.0.len()
