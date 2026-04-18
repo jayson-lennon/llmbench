@@ -69,7 +69,7 @@ pub(crate) use expect_response;
 /// Usage: register_simple_bench!($id:literal, $prompt:literal, $matcher:expr);
 /// Where $matcher is typically an invocation of `expect_response!($expected:literal)`.
 macro_rules! impl_simple_bench {
-    ($id:literal, $prompt:literal, $matcher:expr) => {
+    ($id:literal, $prompt:expr, $matcher:expr) => {
         const ID: &str = $id;
         const PROMPT: &str = $prompt;
 

@@ -53,6 +53,23 @@ use std::sync::Arc;
 use std::{io::ErrorKind, path::Path};
 use tokio::{fs::OpenOptions, io::AsyncReadExt};
 
+/// Check if a bench ID matches a pattern.
+/// If the pattern contains glob metacharacters (`*`, `?`, `[`, `{`),
+/// it is treated as a glob pattern. Otherwise it must match exactly.
+pub fn bench_matches_pattern(bench_id: &BenchId, pattern: &str) -> bool {
+    let id = &bench_id.0;
+    if contains_glob_chars(pattern) {
+        glob::Pattern::new(pattern)
+            .is_ok_and(|pat| pat.matches(id))
+    } else {
+        id == pattern
+    }
+}
+
+pub fn contains_glob_chars(s: &str) -> bool {
+    s.chars().any(|c| matches!(c, '*' | '?' | '[' | '{'))
+}
+
 pub type BenchInit = fn() -> Bench;
 
 #[distributed_slice]

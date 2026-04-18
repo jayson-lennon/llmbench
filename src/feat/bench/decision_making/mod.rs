@@ -1,5 +1,11 @@
+pub mod bug_severity__naive;
+pub mod deployment_gate__naive;
+pub mod incident_response__naive;
+pub mod resource_allocation__naive;
 pub mod task_priority__cot;
 pub mod task_priority__metaprompt;
 pub mod task_priority__naive;
+pub mod task_priority__forge_mythos;
 pub mod task_priority__recheck;
 pub mod task_priority__superprompt;
+pub mod triage__naive;

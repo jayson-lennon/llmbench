@@ -72,7 +72,7 @@ impl ScoreFormatter {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn print(&self, sort_column: SortColumn) {
+    pub fn print(&self, sort_column: SortColumn, condensed: bool) {
         if self.scores.is_empty() {
             println!("no scores matching the filter criteria");
             return;
@@ -132,7 +132,7 @@ impl ScoreFormatter {
                 );
 
                 // response summary
-                {
+                if !condensed {
                     for (response_index, response) in scores.iter().enumerate() {
                         let chat = get_chat_summary(response);
 

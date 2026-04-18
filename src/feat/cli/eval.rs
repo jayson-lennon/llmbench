@@ -1,5 +1,5 @@
 use crate::feat::{
-    bench::AllBenchResults,
+    bench::{AllBenchResults, bench_matches_pattern},
     cli::{CliError, SharedArgs, select_models},
     evaluator::Evaluators,
     model::ModelId,
@@ -39,6 +39,10 @@ pub struct EvalArgs {
     /// Sort column
     #[arg(short, long, default_value_t = SortColumn::Bench)]
     sort: SortColumn,
+
+    /// Suppress individual model responses in output
+    #[arg(short, long)]
+    condensed: bool,
 }
 
 pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[CliError]>> {
@@ -66,11 +70,7 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
             .collect();
     }
 
-    let bench_filter = args
-        .benches
-        .iter()
-        .map(|bench| bench.to_lowercase())
-        .collect::<Vec<_>>();
+    let bench_filter = args.benches;
 
     if !bench_filter.is_empty() {
         scores = scores
@@ -78,14 +78,14 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
             .filter(|(key, _)| {
                 bench_filter
                     .iter()
-                    .any(|filter| key.bench_id.0.contains(filter))
+                    .any(|pattern| bench_matches_pattern(&key.bench_id, pattern))
             })
             .collect();
     }
 
     let formatter = ScoreFormatter::format(scores);
 
-    formatter.print(args.sort);
+    formatter.print(args.sort, args.condensed);
 
     Ok(())
 }

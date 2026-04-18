@@ -3,13 +3,14 @@ use std::{collections::HashMap, collections::VecDeque, str::FromStr, time::Durat
 use crate::{
     error::{ErrContext, Suggestion},
     feat::{
-        bench::{AllBenchResults, BENCHMARKS, BenchId, Benches},
+        bench::{AllBenchResults, BENCHMARKS, BenchId, Benches, bench_matches_pattern, contains_glob_chars},
         cli::{CliError, SharedArgs, select_models},
         completion::{self, PromptPayloadBatch, RunConfig, RunPayload},
         model::{ModelId, SelectedModels},
         persistence::{ResultWriterCmd, spawn_result_writer},
     },
 };
+use crate::feat::bench::BenchError;
 use clap::Parser;
 use error_stack::{Report, ResultExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -19,6 +20,7 @@ use tokio::task::JoinSet;
 #[derive(Parser, Debug)]
 pub struct BenchArgs {
     /// The benches to run. Runs all benches by default.
+    #[arg(short, long)]
     benches: Vec<String>,
 
     /// Bench specific models. Runs on all models by default.
@@ -96,23 +98,27 @@ async fn select_and_validate_models(
 /// If no IDs are specified, returns all benchmarks.
 /// Returns an error if any specified benchmark ID is invalid or not found.
 fn get_and_validate_benches(args: &BenchArgs) -> Result<Benches, Report<[CliError]>> {
-    let bench_ids = get_bench_ids_to_run(args)?;
+    let patterns = get_bench_patterns(args)?;
     let benches = BENCHMARKS.iter().map(|init| init()).collect::<Benches>();
-    if bench_ids.is_empty() {
+    if patterns.is_empty() {
         Ok(benches)
     } else {
-        for id in &bench_ids {
-            if !benches.contains(id) {
-                return Err(Report::from(CliError).expand())
-                    .attach("unable to find bench")
-                    .attach(ErrContext::new(format!("bench name='{id}'")))
-                    .attach(Suggestion("make sure the bench exists"));
-            }
+        let matched: Benches = benches
+            .iter()
+            .filter(|bench| {
+                patterns
+                    .iter()
+                    .any(|pattern| bench_matches_pattern(&bench.id, pattern))
+            })
+            .cloned()
+            .collect();
+        if matched.benches.is_empty() {
+            return Err(Report::from(CliError).expand())
+                .attach("no benches matched the given patterns")
+                .attach_with(|| ErrContext::new(format!("patterns={:?}", patterns)))
+                .attach(Suggestion("make sure the bench exists"));
         }
-        Ok(benches
-            .into_iter()
-            .filter(|bench| bench_ids.contains(&bench.id))
-            .collect())
+        Ok(matched)
     }
 }
 
@@ -219,12 +225,12 @@ async fn wait_for_completion_and_shutdown(
     let _ = result_writer.await;
 }
 
-fn get_bench_ids_to_run(args: &BenchArgs) -> Result<Vec<BenchId>, Report<[CliError]>> {
+fn get_bench_patterns(args: &BenchArgs) -> Result<Vec<String>, Report<[CliError]>> {
     let mut error: Option<Report<[CliError]>> = None;
     let (oks, errs): (Vec<_>, Vec<_>) = args
         .benches
         .iter()
-        .map(|bench| BenchId::from_str(bench))
+        .map(|input| validate_bench_pattern(input))
         .partition(Result::is_ok);
 
     for entry in errs {
@@ -240,5 +246,25 @@ fn get_bench_ids_to_run(args: &BenchArgs) -> Result<Vec<BenchId>, Report<[CliErr
         Err(error)
     } else {
         Ok(oks.into_iter().flatten().collect::<Vec<_>>())
+    }
+}
+
+/// Validate a bench pattern. Non-glob patterns must follow `category/benchname` format.
+/// Glob patterns are validated by the `glob` crate.
+fn validate_bench_pattern(input: &str) -> Result<String, Report<BenchError>> {
+    if contains_glob_chars(input) {
+        glob::Pattern::new(input)
+            .map(|_| input.to_string())
+            .map_err(|e| {
+                Report::from(BenchError)
+                    .attach("invalid glob pattern")
+                    .attach(ErrContext::new(format!("input '{input}'")))
+                    .attach(ErrContext::new(format!("error: {e}")))
+                    .attach(Suggestion(
+                        "check glob syntax: * matches any characters, ? matches one character",
+                    ))
+            })
+    } else {
+        BenchId::from_str(input).map(|_| input.to_string())
     }
 }
