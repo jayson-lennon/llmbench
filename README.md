@@ -119,7 +119,7 @@ Available sort columns: `bench` (default), `model`, `agent`, `in`, `out`, `reaso
 
 Running `eval` prints three sections:
 
-**1. Detail rows** — one row per bench + model + agent combination:
+**1. Detail rows**: one row per bench + model + agent combination:
 
 ```
  model  | bench          | AGENTS.md    | result   | passed | in     | out   | reason | cost/run ($USD) | % cost Δ
@@ -128,7 +128,7 @@ Running `eval` prints three sections:
  model-a| logic/seating  | forge-mythos | ❌ Fail  | 0/4    | 16496  | 1925  | -      | $0.000721334    | +263.27%
 ```
 
-**2. Per-agent summary** — aggregated totals grouped by `AGENTS.md` file, with pass rate, token usage, total cost, and median % cost delta:
+**2. Per-agent summary**: aggregated totals grouped by `AGENTS.md` file, with pass rate, token usage, total cost, and median % cost delta:
 
 ```
         |          | AGENTS.md    | % pass  | passed  | in     | out    | reason | total cost ($USD) | med % cost Δ
@@ -139,7 +139,7 @@ Running `eval` prints three sections:
 
 The `(baseline)` row shows aggregated stats for all runs without an `AGENTS.md`. Agent rows show how each agent performed overall. The `med % cost Δ` column shows the median cost difference compared to the baseline.
 
-**3. Grand totals** — the overall summary across all rows:
+**3. Grand totals**: the overall summary across all rows:
 
 ```
         |          | Grand totals | 87.72%  | 493/562 | 1247623| 136284 | 98070  | $0.192453513      | +432.74%
