@@ -144,7 +144,7 @@ pub fn discover_agents(
 
 // ── Building ────────────────────────────────────────────────────────────────
 
-/// Build the full bench set: bare benches + cartesian product with agents.
+/// Build the full bench set: baseline benches + cartesian product with agents.
 pub fn build_bench_set(
     benches: &[DiscoveredBench],
     agents: &[(String, String)],
@@ -152,7 +152,7 @@ pub fn build_bench_set(
     let mut result = Vec::new();
 
     for bench in benches {
-        // Bare bench (no agents.md)
+        // Baseline bench (no agents.md)
         result.push(build_single_bench(&bench.id, &bench.prompt, &bench.expected, None));
 
         // One bench per agents.md
@@ -170,18 +170,16 @@ pub fn build_evaluators(benches: &[DiscoveredBench], agents: &[(String, String)]
     let mut evaluators = Vec::new();
 
     for bench in benches {
-        let expected = bench.expected.clone();
         evaluators.push((
             BenchId(bench.id.clone()),
-            make_evaluator(expected),
+            make_evaluator(&bench.expected),
         ));
 
         for (agent_name, _) in agents {
             let id = format!("{}+{}", bench.id, agent_name);
-            let expected = bench.expected.clone();
             evaluators.push((
                 BenchId(id),
-                make_evaluator(expected),
+                make_evaluator(&bench.expected),
             ));
         }
     }
@@ -238,7 +236,17 @@ fn build_single_bench(
     })
 }
 
-fn make_evaluator(expected: String) -> Evaluator {
+fn normalize_expected(s: &str) -> String {
+    s.to_string()
+        .lowercase()
+        .remove_chat_tags()
+        .alphanumeric_only()
+        .trim()
+        .to_string()
+}
+
+fn make_evaluator(expected: &str) -> Evaluator {
+    let expected = normalize_expected(expected);
     Evaluator {
         bench: String::new(),
         eval: Box::new(move |responses: &[openrouter::completions::response::Choice]| -> Score {

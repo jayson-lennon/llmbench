@@ -51,9 +51,9 @@ pub struct EvalArgs {
     #[arg(short, long)]
     agents: Option<String>,
 
-    /// Hide bare (no agent) bench results when -a is specified.
+    /// Hide baseline (no agent) bench results when -a is specified.
     #[arg(long)]
-    no_bare: bool,
+    no_baseline: bool,
 
     /// Override prompts directory (default: src/prompts/)
     #[arg(short, long)]
@@ -126,13 +126,13 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
     //
     // When -a is specified:
     //   - Keep agent variants matching the agent pattern
-    //   - Keep bare variants unless --no-bare
+    //   - Keep baseline variants unless --no-baseline
     //   - Both filtered by the bench pattern
     // When -a is not specified:
     //   - Keep everything matching bench pattern
     let bench_patterns: Vec<&str> = args.benches.iter().map(String::as_str).collect();
     let agent_pattern = args.agents.as_deref();
-    let show_bare = !args.no_bare;
+    let show_baseline = !args.no_baseline;
 
     scores = scores
         .into_iter()
@@ -153,8 +153,8 @@ pub async fn run(args: EvalArgs, shared_args: SharedArgs) -> Result<(), Report<[
             match (agent_pattern, agent_suffix) {
                 // No -a flag: show everything
                 (None, _) => true,
-                // -a specified, this row is bare: show unless --no-bare
-                (Some(_), None) => show_bare,
+                // -a specified, this row is baseline: show unless --no-baseline
+                (Some(_), None) => show_baseline,
                 // -a specified, this row has an agent: check it matches
                 (Some(pat), Some(agent)) => matches_bench_id(agent, pat),
             }
