@@ -64,7 +64,7 @@ llmbench bench
 Run specific benchmarks and models:
 
 ```
-llmbench bench -m "x-ai/grok-4" -m "qwen/qwen3-coder" --n-runs 2 logic/seating
+llmbench bench -m "x-ai/grok-4" -m "qwen/qwen3-coder" -b "logic/seating" --n-runs 2
 ```
 
 Run benchmarks composed with an agent `.md` file:
@@ -73,7 +73,7 @@ Run benchmarks composed with an agent `.md` file:
 llmbench bench -a "forge-mythos"
 ```
 
-The `-a` flag accepts a glob pattern matching `.md` files in `src/agents_md/`. When specified, each benchmark is run twice: once as a baseline (no agent) and once with the agent content prepended to the prompt.
+Flags `-a`, `-b`, and `-m` can all be used multiple times and also support globs for selecting multiple agents, models, and benches.
 
 ### Evaluation
 
