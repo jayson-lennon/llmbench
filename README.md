@@ -29,8 +29,6 @@ cargo build --release
 
 ## Configuration
 
-**NOTE**: All models are commented out in the config file to avoid accidental costs. You _must_ edit the file for the tool to work.
-
 The config file comes pre-loaded with some of the models available on OpenRouter at the time of publishing.
 
 Update the `config.toml` with the models that you are interested in testing. `llmbench` runs the benchmark against all models listed unless a CLI flag is used to bench a specific model. Model IDs are from [the model list](https://openrouter.ai/models) at OpenRouter:
