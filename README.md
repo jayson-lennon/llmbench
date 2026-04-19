@@ -1,5 +1,7 @@
 # LLM Bench
 
+![Evaluation output](./readme/eval.png)
+
 A CLI tool for running 1-shot benchmarks for Large Language Models via the [OpenRouter](https://openrouter.ai/) API.
 
 ## Features
