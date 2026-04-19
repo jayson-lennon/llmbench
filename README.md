@@ -1,6 +1,6 @@
 # LLM Bench
 
-A CLI tool for running 1-short benchmarks for Large Language Models via the [OpenRouter](https://openrouter.ai/) API.
+A CLI tool for running 1-shot benchmarks for Large Language Models via the [OpenRouter](https://openrouter.ai/) API.
 
 ## Features
 
